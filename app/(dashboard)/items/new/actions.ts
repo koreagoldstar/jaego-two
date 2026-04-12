@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { allocateSequentialShCodes, formatShSequential, getNextShSequenceStart } from '@/lib/items/allocateShCodes'
 import { generateBarcodeValue, generateSerialValue } from '@/lib/items/codeGeneratorsServer'
 import { redirect } from 'next/navigation'
 
@@ -14,7 +15,11 @@ export async function createItemAction(formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   if (!name) redirect('/items/new?error=' + encodeURIComponent('이름을 입력하세요'))
 
-  const sh = String(formData.get('sh') ?? '').trim()
+  let sh = String(formData.get('sh') ?? '').trim()
+  if (!sh) {
+    const n = await getNextShSequenceStart(supabase, user.id)
+    sh = formatShSequential(n)
+  }
   const barcode_code = String(formData.get('barcode_code') ?? '').trim()
   const serial_number = String(formData.get('serial_number') ?? '').trim()
   const quantity = Math.max(0, parseInt(String(formData.get('quantity') ?? '0'), 10) || 0)
@@ -24,7 +29,7 @@ export async function createItemAction(formData: FormData) {
   const { error } = await supabase.from('items').insert({
     user_id: user.id,
     name,
-    sh: sh || null,
+    sh,
     barcode_code: barcode_code || null,
     serial_number: serial_number || null,
     quantity,
@@ -65,6 +70,10 @@ export async function createItemsBatchAction(formData: FormData) {
   const location = String(formData.get('bulk_location') ?? '').trim()
   const description = String(formData.get('bulk_description') ?? '').trim()
 
+  const autoShList = !shBase
+    ? await allocateSequentialShCodes(supabase, user.id, count)
+    : null
+
   const rows: Array<{
     user_id: string
     name: string
@@ -81,7 +90,9 @@ export async function createItemsBatchAction(formData: FormData) {
       nameStyle === 'paren' ? `${prefix} (${i})` : `${prefix}-${String(i).padStart(3, '0')}`
 
     let sh: string | null = null
-    if (shBase) {
+    if (autoShList) {
+      sh = autoShList[i - 1] ?? null
+    } else if (shBase) {
       sh = shAppendIndex ? `${shBase}-${String(i).padStart(3, '0')}` : shBase
     }
 

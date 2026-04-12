@@ -46,7 +46,18 @@ export function NewItemForm({ initialError, defaultMode = 'single' }: Props) {
       {mode === 'single' ? (
         <form action={createItemAction} className="space-y-4 rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
           <Field label="이름 *" name="name" required placeholder="예: 무선 마이크" />
-          <Field label="SH" name="sh" placeholder="내부 코드" />
+          <div>
+            <label className="block text-sm text-slate-600 mb-1">SH (내부코드)</label>
+            <input
+              name="sh"
+              placeholder="비우면 SH-0000001 형식으로 자동 부여"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              비우면 기존 품목의 <code className="text-[11px] bg-slate-100 px-1 rounded">SH-숫자</code> 중 가장 큰
+              번호 다음부터 순서대로 붙습니다.
+            </p>
+          </div>
 
           <div>
             <div className="flex items-center justify-between gap-2 mb-1">
@@ -185,12 +196,16 @@ export function NewItemForm({ initialError, defaultMode = 'single' }: Props) {
             <label className="block text-sm text-slate-600 mb-1">SH (선택)</label>
             <input
               name="bulk_sh"
-              placeholder="공통 SH 또는 접두어"
+              placeholder="비우면 SH-0000001, SH-0000002 … 자동"
               className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
+            <p className="text-xs text-slate-500 mt-1">
+              비우면 일괄 등록 개수만큼 <code className="text-[11px] bg-slate-100 px-1 rounded">SH-0000001</code>{' '}
+              형식으로 연속 번호가 붙습니다.
+            </p>
             <label className="flex items-center gap-2 mt-2 text-sm text-slate-600 cursor-pointer">
               <input type="checkbox" name="bulk_sh_append_index" defaultChecked className="rounded border-slate-300" />
-              여러 개일 때 SH 뒤에 -001, -002 붙이기
+              SH를 직접 적었을 때만: 끝에 -001, -002 붙이기
             </label>
           </div>
 
