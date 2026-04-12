@@ -1,5 +1,7 @@
+import { redirect } from 'next/navigation'
 import { getKioskEmail } from '@/lib/kiosk-auth'
 import { getSupabaseEnvStatus } from '@/lib/supabase/public-env'
+import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,11 +16,19 @@ function readError(searchParams: Record<string, string | string[] | undefined>) 
   }
 }
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Record<string, string | string[] | undefined>
 }) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (user) {
+    redirect('/')
+  }
+
   const error = readError(searchParams)
   const kioskEmail = getKioskEmail()
   const env = getSupabaseEnvStatus()

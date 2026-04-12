@@ -1,7 +1,17 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import { MobileNav } from '@/components/MobileNav'
 import { DesktopNav } from '@/components/DesktopNav'
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    redirect('/login')
+  }
+
   return (
     <div className="min-h-screen bg-[#f5f6f8] flex">
       <DesktopNav />
