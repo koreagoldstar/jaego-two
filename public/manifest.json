@@ -1,7 +1,7 @@
 {
-  "name": "BroadStock 재고",
-  "short_name": "BroadStock",
-  "description": "방송장비 재고관리",
+  "name": "신화유디텍 장비",
+  "short_name": "신화유디텍",
+  "description": "재고관리",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f6f8",

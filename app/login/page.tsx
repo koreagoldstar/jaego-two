@@ -42,8 +42,8 @@ export default async function LoginPage({
               📦
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">BroadStock</h1>
-          <p className="text-slate-500 text-sm mt-1">방송장비 재고관리</p>
+          <h1 className="text-2xl font-bold text-slate-900">신화유디텍 장비</h1>
+          <p className="text-slate-500 text-sm mt-1">재고관리</p>
         </div>
 
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">

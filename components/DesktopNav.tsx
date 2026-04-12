@@ -15,7 +15,7 @@ export function DesktopNav() {
   return (
     <aside className="hidden md:flex md:flex-col md:w-52 md:shrink-0 border-r border-slate-200 bg-white min-h-screen p-4 gap-1">
       <div className="font-bold text-slate-900 mb-6 px-2 flex items-center gap-2">
-        <span className="text-xl">📦</span> BroadStock
+        <span className="text-xl">📦</span> 신화유디텍 장비
       </div>
       {items.map(({ href, label, icon: Icon }) => (
         <Link

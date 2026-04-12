@@ -30,7 +30,6 @@ export default async function HomePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-slate-900">대시보드</h1>
-        <p className="text-sm text-slate-500 mt-1">박스히어로 스타일 재고 요약</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

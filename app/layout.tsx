@@ -6,13 +6,13 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'BroadStock - 방송장비 재고관리',
-  description: '방송장비 전용 재고관리 시스템',
+  title: '신화유디텍 장비',
+  description: '재고관리',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'BroadStock',
+    title: '신화유디텍 장비',
   },
 }
 
