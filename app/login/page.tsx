@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getKioskEmail } from '@/lib/kiosk-auth'
-import { getSupabaseEnvStatus } from '@/lib/supabase/public-env'
+import { getSupabaseEnvStatus } from '@/lib/supabase/supabasePublicEnv'
 import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'

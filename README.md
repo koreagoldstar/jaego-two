@@ -60,6 +60,17 @@ Supabase SQL: `supabase/migrations/001_initial.sql` 실행 (자세한 절차는 
    - **Redirect URLs** 에 `https://본인-프로젝트.vercel.app/**` 추가 후 저장  
 8. 환경 변수를 나중에 바꿨다면 Vercel에서 **Redeploy** (빌드 시 `NEXT_PUBLIC_*` 가 클라이언트에 들어감)
 
+## Vercel에서 `middleware` / `public-env` 빌드 오류가 날 때
+
+이 저장소 **`main` 최신본에는 루트 `middleware.ts` 파일이 없습니다.** 그런데도 같은 오류가 나오면 **Vercel이 이 GitHub 저장소를 빌드하지 않은 것**입니다.
+
+1. Vercel → 해당 프로젝트 → **Settings → Git**  
+   - **Connected Git Repository** 가 **`koreagoldstar/jaego-two`** 인지 확인 (다른 저장소·포크면 안 됨)  
+   - **Production Branch** 가 **`main`** 인지 확인  
+   - **Root Directory** 는 **비움** (한 글자도 넣지 않음)
+2. **Deployments** 에서 맨 위 배포의 **커밋 SHA** 를 눌러 GitHub 커밋과 같은지 확인  
+3. **Redeploy** 시 **Use existing Build Cache** 를 끄고(가능하면 “Clear cache and redeploy”) 다시 빌드
+
 ## 라이선스
 
 Private / 사내용.

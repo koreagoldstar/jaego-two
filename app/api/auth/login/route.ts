@@ -1,6 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseEnvStatus } from '@/lib/supabase/public-env'
+import { getSupabaseEnvStatus } from '@/lib/supabase/supabasePublicEnv'
 import { formatAuthError } from '@/lib/auth-errors'
 import { getKioskEmail } from '@/lib/kiosk-auth'
 
