@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { getSupabasePublicEnv } from '@/lib/supabase/public-env'
+/** Edge 번들러는 middleware에서 `@/` 별칭 import가 실패하는 경우가 있어 상대 경로 사용 */
+import { getSupabasePublicEnv } from './lib/supabase/public-env'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
