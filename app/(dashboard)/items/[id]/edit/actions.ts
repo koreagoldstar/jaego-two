@@ -29,7 +29,7 @@ export async function updateItemAction(itemId: string, formData: FormData) {
       serial_number: serial_number || null,
       quantity,
       location: location || null,
-      description: description || null,
+      description: description || '',
       updated_at: new Date().toISOString(),
     })
     .eq('id', itemId)

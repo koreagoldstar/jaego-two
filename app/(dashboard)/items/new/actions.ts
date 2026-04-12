@@ -29,7 +29,7 @@ export async function createItemAction(formData: FormData) {
     serial_number: serial_number || null,
     quantity,
     location: location || null,
-    description: description || null,
+    description: description || '',
   })
 
   if (error) {
@@ -73,7 +73,7 @@ export async function createItemsBatchAction(formData: FormData) {
     serial_number: string | null
     quantity: number
     location: string | null
-    description: string | null
+    description: string
   }> = []
 
   for (let i = 1; i <= count; i++) {
@@ -93,7 +93,7 @@ export async function createItemsBatchAction(formData: FormData) {
       serial_number: autoSerial ? generateSerialValue() : null,
       quantity: quantityEach,
       location: location || null,
-      description: description || null,
+      description: description || '',
     })
   }
 
