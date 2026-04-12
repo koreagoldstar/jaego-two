@@ -14,6 +14,7 @@ export function MoveStockClient() {
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string>('')
   const [amount, setAmount] = useState(1)
+  const [project, setProject] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -54,6 +55,7 @@ export function MoveStockClient() {
       p_direction: direction,
       p_amount: amount,
       p_note: note.trim() || null,
+      p_project: project.trim() || null,
     })
     setBusy(false)
     if (error) {
@@ -77,6 +79,17 @@ export function MoveStockClient() {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
+        <label className="block text-sm font-medium text-slate-700">프로젝트 / 현장</label>
+        <input
+          value={project}
+          onChange={e => setProject(e.target.value)}
+          placeholder="예: OO방송 촬영, A행사 출고"
+          className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+        />
+        <p className="text-xs text-slate-400">어떤 프로젝트로 들어오거나 나가는지 적어 두면 이력에서 구분할 수 있습니다.</p>
+      </div>
+
       <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
         <label className="block text-sm font-medium text-slate-700">품목</label>
         <select

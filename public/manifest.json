@@ -6,5 +6,13 @@
   "display": "standalone",
   "background_color": "#f5f6f8",
   "theme_color": "#2563eb",
-  "icons": []
+  "icons": [],
+  "shortcuts": [
+    {
+      "name": "입·출고 전용",
+      "short_name": "입출고",
+      "description": "메뉴 없이 입고·출고만",
+      "url": "/move-app"
+    }
+  ]
 }

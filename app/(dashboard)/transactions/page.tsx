@@ -14,7 +14,7 @@ export default async function TransactionsPage() {
 
   const { data: rows } = await supabase
     .from('stock_transactions')
-    .select('id, direction, amount, note, created_at, items(name)')
+    .select('id, direction, amount, note, project, created_at, items(name)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -43,6 +43,7 @@ export default async function TransactionsPage() {
                 <p className="font-medium text-slate-900 truncate">{tx.items?.name ?? '품목'}</p>
                 <p className="text-xs text-slate-400">
                   {new Date(tx.created_at).toLocaleString('ko-KR')}
+                  {tx.project ? ` · ${tx.project}` : ''}
                   {tx.note ? ` · ${tx.note}` : ''}
                 </p>
               </div>

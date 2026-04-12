@@ -34,7 +34,7 @@ export function ScanClient() {
         .maybeSingle()
 
       if (data?.id) {
-        router.push(`/move?item=${data.id}`)
+        router.push(`/move-app?item=${data.id}`)
         return
       }
 
@@ -47,7 +47,7 @@ export function ScanClient() {
         .maybeSingle()
 
       if (loose?.id) {
-        router.push(`/move?item=${loose.id}`)
+        router.push(`/move-app?item=${loose.id}`)
         return
       }
 

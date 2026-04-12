@@ -19,5 +19,7 @@ export type StockTransaction = {
   direction: 'in' | 'out'
   amount: number
   note: string | null
+  /** 입·출고 연결 프로젝트/현장명 */
+  project: string | null
   created_at: string
 }

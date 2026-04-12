@@ -8,7 +8,16 @@ export default function MovePage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-slate-900">입·출고</h1>
-        <p className="text-sm text-slate-500">휴대폰에서 품목을 고르고 수량을 입력하세요.</p>
+        <p className="text-sm text-slate-500">휴대폰에서 품목·프로젝트·수량을 입력하세요.</p>
+        <p className="text-sm mt-2">
+          <a
+            href="/move-app"
+            className="text-blue-600 font-medium underline underline-offset-2 hover:text-blue-700"
+          >
+            입출고 전용 화면 열기
+          </a>
+          <span className="text-slate-500"> — 필드용으로 메뉴 없이 바로 처리</span>
+        </p>
       </div>
       <Suspense fallback={<div className="text-center text-slate-500 py-8">로딩…</div>}>
         <MoveStockClient />
