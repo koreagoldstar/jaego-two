@@ -2,7 +2,7 @@
   "name": "신화유디텍 장비",
   "short_name": "신화유디텍",
   "description": "재고관리",
-  "start_url": "/",
+  "start_url": "/move-app",
   "display": "standalone",
   "background_color": "#f5f6f8",
   "theme_color": "#2563eb",

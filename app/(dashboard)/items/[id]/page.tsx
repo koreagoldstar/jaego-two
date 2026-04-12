@@ -42,7 +42,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
         <h1 className="text-xl font-bold text-slate-900">{item.name}</h1>
         <dl className="text-sm space-y-2">
           <Row label="수량" value={<span className="text-2xl font-semibold text-blue-600">{item.quantity}</span>} />
-          {item.sku && <Row label="SKU" value={item.sku} />}
+          {item.sh && <Row label="SH" value={item.sh} />}
           {item.barcode_code && <Row label="바코드" value={item.barcode_code} />}
           {item.serial_number && <Row label="시리얼" value={item.serial_number} />}
           {item.location && <Row label="위치" value={item.location} />}

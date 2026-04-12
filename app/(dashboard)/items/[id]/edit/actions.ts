@@ -13,7 +13,7 @@ export async function updateItemAction(itemId: string, formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   if (!name) redirect(`/items/${itemId}/edit?error=` + encodeURIComponent('이름을 입력하세요'))
 
-  const sku = String(formData.get('sku') ?? '').trim()
+  const sh = String(formData.get('sh') ?? '').trim()
   const barcode_code = String(formData.get('barcode_code') ?? '').trim()
   const serial_number = String(formData.get('serial_number') ?? '').trim()
   const quantity = Math.max(0, parseInt(String(formData.get('quantity') ?? '0'), 10) || 0)
@@ -24,7 +24,7 @@ export async function updateItemAction(itemId: string, formData: FormData) {
     .from('items')
     .update({
       name,
-      sku: sku || null,
+      sh: sh || null,
       barcode_code: barcode_code || null,
       serial_number: serial_number || null,
       quantity,

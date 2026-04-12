@@ -6,12 +6,12 @@ import { Printer } from 'lucide-react'
 
 export function BarcodePanel() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [sku, setSku] = useState('')
+  const [shPrefix, setShPrefix] = useState('')
   const [serial, setSerial] = useState('')
   const [sep, setSep] = useState('|')
   const [format, setFormat] = useState<'CODE128' | 'CODE39'>('CODE128')
 
-  const payload = [sku.trim(), serial.trim()].filter(Boolean).join(sep || '|')
+  const payload = [shPrefix.trim(), serial.trim()].filter(Boolean).join(sep || '|')
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -81,15 +81,15 @@ export function BarcodePanel() {
         }}
       />
       <p className="text-sm text-slate-600">
-        SKU·품번과 시리얼을 함께 넣으면 <code className="text-xs bg-slate-100 px-1 rounded">{sep || '|'}</code> 로
+        SH·품번과 시리얼을 함께 넣으면 <code className="text-xs bg-slate-100 px-1 rounded">{sep || '|'}</code> 로
         이어서 CODE128 바코드로 만듭니다.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="block text-sm text-slate-600 mb-1">SKU / 접두어</label>
+          <label className="block text-sm text-slate-600 mb-1">SH / 접두어</label>
           <input
-            value={sku}
-            onChange={e => setSku(e.target.value)}
+            value={shPrefix}
+            onChange={e => setShPrefix(e.target.value)}
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             placeholder="예: MIC-900"
           />

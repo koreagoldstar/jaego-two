@@ -3,7 +3,7 @@ export type Item = {
   user_id: string
   name: string
   description: string | null
-  sku: string | null
+  sh: string | null
   barcode_code: string | null
   serial_number: string | null
   quantity: number

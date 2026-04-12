@@ -51,7 +51,7 @@ export default async function ItemsPage() {
                 <div className="min-w-0">
                   <p className="font-medium text-slate-900 truncate">{item.name}</p>
                   <p className="text-xs text-slate-500 truncate">
-                    {item.sku ? `SKU ${item.sku}` : ''}
+                    {item.sh ? `SH ${item.sh}` : ''}
                     {item.barcode_code ? ` · ${item.barcode_code}` : ''}
                   </p>
                 </div>
