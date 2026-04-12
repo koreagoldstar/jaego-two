@@ -70,9 +70,31 @@ export default async function LoginPage({
                   API 의 anon public 키 전체를 넣으세요.
                 </span>
               )}
-              <span className="block text-xs text-amber-700 mt-2">
-                저장 후 반드시 <code className="bg-amber-100 px-1">npm run dev</code> 를 끄고 다시 실행하세요.
-              </span>
+              {process.env.VERCEL ? (
+                <span className="block text-xs text-amber-700 mt-2 space-y-1">
+                  <strong className="block">Vercel 배포인 경우</strong>
+                  1) Dashboard → 이 프로젝트 → <strong>Settings → Environment Variables</strong>
+                  <br />
+                  2) 이름이 정확히{' '}
+                  <code className="bg-amber-100 px-1 text-[11px]">NEXT_PUBLIC_SUPABASE_URL</code>,{' '}
+                  <code className="bg-amber-100 px-1 text-[11px]">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> 인지 확인 (앞에{' '}
+                  <code className="text-[11px]">NEXT_PUBLIC_</code> 필수)
+                  <br />
+                  3) <strong>Production</strong> (그리고 미리보기 URL을 쓰면 Preview도)에 체크되어 있는지 확인
+                  <br />
+                  4) 저장 후 <strong>Deployments → Redeploy</strong> (환경 변수는 새 빌드에 반영됩니다)
+                  <br />
+                  <span className="text-amber-800/90">
+                    또는 서버 전용으로 <code className="text-[11px]">SUPABASE_URL</code>,{' '}
+                    <code className="text-[11px]">SUPABASE_ANON_KEY</code> 만 넣어도 됩니다. (브라우저용 클라이언트까지 쓰려면{' '}
+                    <code className="text-[11px]">NEXT_PUBLIC_*</code> 도 필요합니다)
+                  </span>
+                </span>
+              ) : (
+                <span className="block text-xs text-amber-700 mt-2">
+                  저장 후 반드시 <code className="bg-amber-100 px-1">npm run dev</code> 를 끄고 다시 실행하세요.
+                </span>
+              )}
             </p>
           )}
 
