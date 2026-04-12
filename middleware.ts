@@ -1,11 +1,21 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-/** Edge 번들러는 middleware에서 `@/` 별칭 import가 실패하는 경우가 있어 상대 경로 사용 */
-import { getSupabasePublicEnv } from './lib/supabase/public-env'
+
+/** Edge(Vercel)는 middleware에서 로컬 모듈 import 시 실패하는 경우가 있어, env 읽기만 이 파일에 둡니다. */
+const PLACEHOLDER_URL = 'https://placeholder.supabase.co'
+const PLACEHOLDER_ANON =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjJni43kdQwgnWNReilDMblYTn_I0'
+
+function getSupabaseUrlAndKeyForEdge(): { url: string; key: string } {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()
+  if (url && key) return { url, key }
+  return { url: PLACEHOLDER_URL, key: PLACEHOLDER_ANON }
+}
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
-  const { url: supabaseUrl, key: supabaseKey } = getSupabasePublicEnv()
+  const { url: supabaseUrl, key: supabaseKey } = getSupabaseUrlAndKeyForEdge()
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
