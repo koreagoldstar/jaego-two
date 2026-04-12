@@ -1,0 +1,10 @@
+{
+  "name": "BroadStock 재고",
+  "short_name": "BroadStock",
+  "description": "방송장비 재고관리",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#2563eb",
+  "icons": []
+}
