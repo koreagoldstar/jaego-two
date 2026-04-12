@@ -7,10 +7,12 @@ import { Sparkles } from 'lucide-react'
 
 type Props = {
   initialError?: string
+  /** URL `?mode=bulk` 등으로 일괄 등록 탭을 처음부터 열 때 */
+  defaultMode?: 'single' | 'bulk'
 }
 
-export function NewItemForm({ initialError }: Props) {
-  const [mode, setMode] = useState<'single' | 'bulk'>('single')
+export function NewItemForm({ initialError, defaultMode = 'single' }: Props) {
+  const [mode, setMode] = useState<'single' | 'bulk'>(defaultMode)
   const [barcode, setBarcode] = useState('')
   const [serial, setSerial] = useState('')
 

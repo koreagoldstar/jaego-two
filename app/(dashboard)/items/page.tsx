@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { Plus, ChevronRight } from 'lucide-react'
+import { Layers, Plus } from 'lucide-react'
 import type { Item } from '@/lib/supabase/types'
+import { ItemsListClient } from '@/components/items/ItemsListClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,13 +28,22 @@ export default async function ItemsPage() {
           <h1 className="text-xl font-bold text-slate-900">품목</h1>
           <p className="text-sm text-slate-500">BoxHero 스타일 목록</p>
         </div>
-        <Link
-          href="/items/new"
-          className="inline-flex items-center gap-1 rounded-xl bg-blue-600 text-white text-sm font-medium px-4 py-2.5 shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          추가
-        </Link>
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          <Link
+            href="/items/new?mode=bulk"
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white text-slate-800 text-sm font-medium px-3 py-2.5 shadow-sm hover:bg-slate-50"
+          >
+            <Layers className="w-4 h-4" />
+            여러 개 추가
+          </Link>
+          <Link
+            href="/items/new"
+            className="inline-flex items-center gap-1 rounded-xl bg-blue-600 text-white text-sm font-medium px-4 py-2.5 shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            추가
+          </Link>
+        </div>
       </div>
 
       {items.length === 0 ? (
@@ -41,28 +51,7 @@ export default async function ItemsPage() {
           등록된 품목이 없습니다. <Link className="text-blue-600 font-medium" href="/items/new">품목 추가</Link>
         </div>
       ) : (
-        <ul className="space-y-2">
-          {items.map(item => (
-            <li key={item.id}>
-              <Link
-                href={`/items/${item.id}`}
-                className="flex items-center justify-between gap-3 rounded-2xl bg-white border border-slate-200 p-4 shadow-sm active:bg-slate-50"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium text-slate-900 truncate">{item.name}</p>
-                  <p className="text-xs text-slate-500 truncate">
-                    {item.sh ? `SH ${item.sh}` : ''}
-                    {item.barcode_code ? ` · ${item.barcode_code}` : ''}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-lg font-semibold text-blue-600 tabular-nums">{item.quantity}</span>
-                  <ChevronRight className="w-5 h-5 text-slate-300" />
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <ItemsListClient items={items} />
       )}
     </div>
   )
