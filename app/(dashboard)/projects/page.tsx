@@ -8,7 +8,6 @@ type PlanRow = {
   project_name: string
   item_id: string
   planned_qty: number
-  items: { name: string; quantity: number } | null
 }
 
 type TxRow = {
@@ -25,11 +24,11 @@ export default async function ProjectsPage() {
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: itemsData }, { data: planData }, { data: txData }] = await Promise.all([
+  const [itemsRes, planRes, txRes] = await Promise.all([
     supabase.from('items').select('id, name, quantity').eq('user_id', user.id).order('name'),
     supabase
       .from('project_usage_plans')
-      .select('project_name, item_id, planned_qty, items(name, quantity)')
+      .select('project_name, item_id, planned_qty')
       .eq('user_id', user.id)
       .order('project_name')
       .order('created_at', { ascending: true }),
@@ -41,9 +40,30 @@ export default async function ProjectsPage() {
       .neq('project', ''),
   ])
 
+  const itemsData = itemsRes.data
+  const planData = planRes.data
+  const txData = txRes.data
+
   const items = (itemsData ?? []) as Item[]
+  const itemById = new Map(items.map(item => [item.id, item] as const))
   const plans = (planData ?? []) as unknown as PlanRow[]
   const txRows = (txData ?? []) as TxRow[]
+
+  if (itemsRes.error || planRes.error || txRes.error) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">프로젝트 사용예정 재고</h1>
+          <p className="text-sm text-red-600">데이터를 불러오는 중 오류가 발생했습니다.</p>
+        </div>
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {planRes.error?.message?.includes('project_usage_plans')
+            ? 'DB 마이그레이션(005_project_usage_plans.sql)이 아직 적용되지 않았습니다. Supabase SQL Editor에서 먼저 실행해주세요.'
+            : planRes.error?.message ?? itemsRes.error?.message ?? txRes.error?.message ?? '알 수 없는 오류'}
+        </div>
+      </div>
+    )
+  }
 
   const shippedMap = new Map<string, number>()
   for (const tx of txRows) {
@@ -133,8 +153,8 @@ export default async function ProjectsPage() {
                     <tbody>
                       {rows.map(row => (
                         <tr key={`${row.project_name}-${row.item_id}`} className="border-b border-slate-100 last:border-0">
-                          <td className="py-2 pr-3 text-slate-900">{row.items?.name ?? '품목'}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">{row.items?.quantity ?? 0}</td>
+                          <td className="py-2 pr-3 text-slate-900">{itemById.get(row.item_id)?.name ?? '품목'}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums">{itemById.get(row.item_id)?.quantity ?? 0}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">{row.planned_qty}</td>
                           <td className="py-2 pr-3 text-right tabular-nums">{row.shipped}</td>
                           <td className={`py-2 text-right tabular-nums ${row.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
