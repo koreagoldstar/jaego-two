@@ -17,6 +17,7 @@ export function MoveStockClient() {
   const [selectedId, setSelectedId] = useState<string>('')
   const [amount, setAmount] = useState(1)
   const [project, setProject] = useState('')
+  const [projectOptions, setProjectOptions] = useState<string[]>([])
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -33,6 +34,14 @@ export function MoveStockClient() {
     if (!user) return
     const { data } = await supabase.from('items').select('*').eq('user_id', user.id).order('name')
     setItems((data ?? []) as Item[])
+    const { data: projectRows } = await supabase
+      .from('project_usage_plans')
+      .select('project_name')
+      .eq('user_id', user.id)
+    const names = Array.from(
+      new Set((projectRows ?? []).map(r => (r as { project_name?: string }).project_name?.trim() ?? '').filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b))
+    setProjectOptions(names)
     setLoading(false)
   }, [])
 
@@ -216,11 +225,17 @@ export function MoveStockClient() {
       <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
         <label className="block text-sm font-medium text-slate-700">프로젝트 / 현장</label>
         <input
+          list="project-options"
           value={project}
           onChange={e => setProject(e.target.value)}
           placeholder="예: OO방송, A행사"
           className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
         />
+        <datalist id="project-options">
+          {projectOptions.map(name => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">

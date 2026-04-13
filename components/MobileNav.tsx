@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Package, ArrowLeftRight, ScanLine, Menu } from 'lucide-react'
+import { Home, Package, ArrowLeftRight, ScanLine, FolderKanban, Menu } from 'lucide-react'
 
 const links = [
   { href: '/', label: '홈', icon: Home },
   { href: '/items', label: '품목', icon: Package },
   { href: '/move', label: '입출고', icon: ArrowLeftRight },
   { href: '/scan', label: '스캔', icon: ScanLine },
+  { href: '/projects', label: '프로젝트', icon: FolderKanban },
   { href: '/settings', label: '설정', icon: Menu },
 ]
 

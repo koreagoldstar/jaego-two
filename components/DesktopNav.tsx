@@ -1,11 +1,12 @@
 import Link from 'next/link'
-import { Package, ArrowLeftRight, ScanLine, Settings, Home, Barcode, History } from 'lucide-react'
+import { Package, ArrowLeftRight, ScanLine, Settings, Home, Barcode, History, FolderKanban } from 'lucide-react'
 
 const items = [
   { href: '/', label: '대시보드', icon: Home },
   { href: '/items', label: '품목', icon: Package },
   { href: '/move', label: '입출고', icon: ArrowLeftRight },
   { href: '/scan', label: '스캔', icon: ScanLine },
+  { href: '/projects', label: '프로젝트', icon: FolderKanban },
   { href: '/barcode', label: '바코드', icon: Barcode },
   { href: '/transactions', label: '이력', icon: History },
   { href: '/settings', label: '설정', icon: Settings },

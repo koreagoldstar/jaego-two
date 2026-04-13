@@ -22,6 +22,7 @@ end $$;
 
 -- 2) 테이블 (의존 순서: 자식 → 부모)
 drop table if exists public.inventory_events cascade;
+drop table if exists public.project_usage_plans cascade;
 drop table if exists public.stock_transactions cascade;
 drop table if exists public.items cascade;
 
@@ -68,14 +69,27 @@ create table public.inventory_events (
   created_at timestamptz not null default now()
 );
 
+create table public.project_usage_plans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  project_name text not null,
+  item_id uuid not null references public.items (id) on delete cascade,
+  planned_qty integer not null default 0 check (planned_qty >= 0),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index items_user_idx on public.items (user_id);
 create index stock_tx_user_idx on public.stock_transactions (user_id);
 create index stock_tx_item_idx on public.stock_transactions (item_id);
 create index inventory_events_user_idx on public.inventory_events (user_id, created_at desc);
+create unique index project_usage_plans_unique on public.project_usage_plans (user_id, project_name, item_id);
+create index project_usage_plans_user_idx on public.project_usage_plans (user_id, project_name);
 
 alter table public.items enable row level security;
 alter table public.stock_transactions enable row level security;
 alter table public.inventory_events enable row level security;
+alter table public.project_usage_plans enable row level security;
 
 create policy items_select on public.items for select using (auth.uid() = user_id);
 create policy items_insert on public.items for insert with check (auth.uid() = user_id);
@@ -91,6 +105,10 @@ create policy inventory_events_select on public.inventory_events for select usin
 create policy inventory_events_insert on public.inventory_events for insert with check (auth.uid() = user_id);
 create policy inventory_events_update on public.inventory_events for update using (auth.uid() = user_id);
 create policy inventory_events_delete on public.inventory_events for delete using (auth.uid() = user_id);
+create policy project_usage_plans_select on public.project_usage_plans for select using (auth.uid() = user_id);
+create policy project_usage_plans_insert on public.project_usage_plans for insert with check (auth.uid() = user_id);
+create policy project_usage_plans_update on public.project_usage_plans for update using (auth.uid() = user_id);
+create policy project_usage_plans_delete on public.project_usage_plans for delete using (auth.uid() = user_id);
 
 create or replace function public.apply_stock_move(
   p_item_id uuid,

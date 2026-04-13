@@ -34,3 +34,13 @@ export type InventoryEvent = {
   detail: string | null
   created_at: string
 }
+
+export type ProjectUsagePlan = {
+  id: string
+  user_id: string
+  project_name: string
+  item_id: string
+  planned_qty: number
+  created_at: string
+  updated_at: string
+}

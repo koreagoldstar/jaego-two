@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { Package, ArrowLeftRight, ScanLine, Barcode, History, Boxes } from 'lucide-react'
+import { Package, ArrowLeftRight, ScanLine, Barcode, History, Boxes, FolderKanban } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +23,7 @@ export default async function HomePage() {
     { href: '/move', label: '입·출고', desc: '휴대폰에서 처리', icon: ArrowLeftRight, color: 'bg-blue-50' },
     { href: '/scan', label: '바코드 스캔', desc: '카메라로 조회', icon: ScanLine, color: 'bg-white' },
     { href: '/move-bulk', label: '일괄 출고', desc: '다중 스캔 한 번에', icon: Boxes, color: 'bg-orange-50' },
+    { href: '/projects', label: '프로젝트 계획', desc: '사용예정/잔여 확인', icon: FolderKanban, color: 'bg-violet-50' },
     { href: '/barcode', label: '바코드 만들기', desc: '시리얼 포함', icon: Barcode, color: 'bg-white' },
     { href: '/transactions', label: '입출고 이력', desc: '최근 기록', icon: History, color: 'bg-white' },
   ]
