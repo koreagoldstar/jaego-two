@@ -35,6 +35,15 @@ function sanitizeFilePart(s: string): string {
   return s.slice(0, 48).replace(/[/\\?%*:|"<>]/g, '-').trim() || 'item'
 }
 
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function BarcodeStrip({
   payload,
   format,
@@ -236,6 +245,25 @@ export function BarcodePanel() {
     [format]
   )
 
+  const drawToDataUrl = useCallback(
+    (payload: string): string | null => {
+      const canvas = document.createElement('canvas')
+      try {
+        JsBarcode(canvas, payload, {
+          format,
+          width: 2,
+          height: 92,
+          displayValue: false,
+          margin: 6,
+        })
+        return canvas.toDataURL('image/png')
+      } catch {
+        return null
+      }
+    },
+    [format]
+  )
+
   const triggerDownload = (blob: Blob, filename: string) => {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -262,10 +290,107 @@ export function BarcodePanel() {
     }
   }
 
-  function printBarcode() {
+  async function printBarcode() {
     if (mode === 'manual' && !manualPayload) return
     if (mode === 'items' && validItemRows.length === 0) return
-    requestAnimationFrame(() => window.print())
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=520,height=760')
+    if (!printWindow) return
+
+    const labels =
+      mode === 'manual'
+        ? [
+            {
+              caption: '',
+              metaLines: [] as string[],
+              payload: manualPayload,
+            },
+          ]
+        : validItemRows.map(({ item, payload, unitIndex, serial }) => ({
+            caption: `${item.name} #${unitIndex}`,
+            metaLines: [
+              item.sh ? `SH: ${item.quantity > 1 ? `${item.sh}-${String(unitIndex).padStart(3, '0')}` : item.sh}` : '',
+              serial ? `Serial: ${serial}` : '',
+            ].filter(Boolean),
+            payload,
+          }))
+
+    const htmlLabels = labels
+      .map(label => {
+        const barcodeDataUrl = drawToDataUrl(label.payload)
+        if (!barcodeDataUrl) return ''
+        const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
+        const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
+        return `
+          <section class="label">
+            ${captionHtml}
+            ${metaHtml}
+            <img class="barcode" src="${barcodeDataUrl}" alt="barcode" />
+          </section>
+        `
+      })
+      .filter(Boolean)
+      .join('')
+
+    if (!htmlLabels) {
+      printWindow.close()
+      return
+    }
+
+    printWindow.document.open()
+    printWindow.document.write(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Barcode Print</title>
+    <style>
+      @page { size: ${paperPreset.widthMm}mm ${paperPreset.heightMm}mm; margin: 0; }
+      html, body { margin: 0; padding: 0; background: #fff; }
+      .label {
+        width: ${paperPreset.widthMm}mm;
+        height: ${paperPreset.heightMm}mm;
+        box-sizing: border-box;
+        padding: 1mm;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6mm;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+      }
+      .label:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .caption {
+        margin: 0;
+        font-size: 7pt;
+        line-height: 1.1;
+        text-align: center;
+        max-width: 100%;
+      }
+      .meta {
+        margin: 0;
+        font-size: 6.2pt;
+        line-height: 1.1;
+        text-align: center;
+        max-width: 100%;
+        word-break: break-all;
+      }
+      .barcode {
+        width: 96%;
+        height: auto;
+        max-height: ${Math.max(12, paperPreset.heightMm - 14)}mm;
+      }
+    </style>
+  </head>
+  <body>${htmlLabels}</body>
+</html>`)
+    printWindow.document.close()
+    printWindow.focus()
+    printWindow.print()
+    printWindow.close()
   }
 
   const canPrint =
@@ -549,7 +674,7 @@ export function BarcodePanel() {
         <button
           type="button"
           disabled={!canPrint}
-          onClick={printBarcode}
+          onClick={() => void printBarcode()}
           className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 text-white font-medium py-3 shadow-sm disabled:opacity-40 active:scale-[0.99]"
         >
           <Printer className="w-5 h-5 shrink-0" aria-hidden />
