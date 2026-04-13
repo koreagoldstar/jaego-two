@@ -1,8 +1,6 @@
 import { Suspense } from 'react'
 import { ScanClient } from '@/components/ScanClient'
 
-export const dynamic = 'force-dynamic'
-
 export default function ScanPage() {
   return (
     <div className="space-y-4">

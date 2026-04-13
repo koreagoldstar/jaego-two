@@ -1,7 +1,5 @@
 import { BulkOutClient } from '@/components/BulkOutClient'
 
-export const dynamic = 'force-dynamic'
-
 export default function MoveBulkPage() {
   return (
     <div className="space-y-4">
