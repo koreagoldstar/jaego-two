@@ -33,11 +33,40 @@ export function BarcodeCamera({
     let controls: { stop: () => void } | undefined
     let attachedVideo: HTMLVideoElement | null = null
 
+    const pickBackDeviceId = async () => {
+      let envDeviceId: string | undefined
+      try {
+        // iPhone Safari에서 labels가 비어 있을 수 있어, environment 우선 스트림으로 실제 deviceId를 먼저 확보합니다.
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        })
+        const track = stream.getVideoTracks()[0]
+        envDeviceId = track?.getSettings().deviceId
+        stream.getTracks().forEach(t => t.stop())
+      } catch {
+        // 권한/환경에 따라 실패할 수 있으므로 장치 목록 기반 선택으로 fallback
+      }
+
+      if (envDeviceId) return envDeviceId
+
+      const devices = await BrowserMultiFormatReader.listVideoInputDevices()
+      const scored = devices
+        .map(d => {
+          const label = d.label.toLowerCase()
+          let score = 0
+          if (/back|rear|environment|후면|뒤/i.test(label)) score += 100
+          if (/front|user|facetime|전면|앞/i.test(label)) score -= 100
+          return { id: d.deviceId, score }
+        })
+        .sort((a, b) => b.score - a.score)
+
+      return scored[0]?.id
+    }
+
     ;(async () => {
       try {
-        const devices = await BrowserMultiFormatReader.listVideoInputDevices()
-        const back =
-          devices.find(d => /back|rear|environment/i.test(d.label))?.deviceId ?? devices[0]?.deviceId
+        const back = await pickBackDeviceId()
         const videoEl = videoRef.current
         if (!videoEl || cancelled) return
         attachedVideo = videoEl
