@@ -39,3 +39,24 @@ export async function saveProjectPlanAction(formData: FormData) {
 
   revalidatePath('/projects')
 }
+
+export async function deleteProjectPlanAction(formData: FormData) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return
+
+  const project_name = String(formData.get('project_name') ?? '').trim()
+  const item_id = String(formData.get('item_id') ?? '').trim()
+  if (!project_name || !item_id) return
+
+  await supabase
+    .from('project_usage_plans')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('project_name', project_name)
+    .eq('item_id', item_id)
+
+  revalidatePath('/projects')
+}

@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { saveProjectPlanAction } from '@/app/(dashboard)/projects/actions'
+import { deleteProjectPlanAction, saveProjectPlanAction } from '@/app/(dashboard)/projects/actions'
 import type { Item } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
@@ -148,6 +148,7 @@ export default async function ProjectsPage() {
                         <th className="py-2 pr-3 text-right">사용예정</th>
                         <th className="py-2 pr-3 text-right">출고완료</th>
                         <th className="py-2 text-right">예정 잔여</th>
+                        <th className="py-2 pl-3 text-right">수정/삭제</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -159,6 +160,37 @@ export default async function ProjectsPage() {
                           <td className="py-2 pr-3 text-right tabular-nums">{row.shipped}</td>
                           <td className={`py-2 text-right tabular-nums ${row.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
                             {row.remaining}
+                          </td>
+                          <td className="py-2 pl-3">
+                            <div className="flex justify-end gap-2">
+                              <form action={saveProjectPlanAction} className="flex items-center gap-1.5">
+                                <input type="hidden" name="project_name" value={row.project_name} />
+                                <input type="hidden" name="item_id" value={row.item_id} />
+                                <input
+                                  name="planned_qty"
+                                  type="number"
+                                  min={0}
+                                  defaultValue={row.planned_qty}
+                                  className="w-20 rounded-md border border-slate-200 px-2 py-1 text-xs text-right tabular-nums"
+                                />
+                                <button
+                                  type="submit"
+                                  className="rounded-md bg-blue-600 text-white px-2 py-1 text-xs font-medium whitespace-nowrap"
+                                >
+                                  수정
+                                </button>
+                              </form>
+                              <form action={deleteProjectPlanAction}>
+                                <input type="hidden" name="project_name" value={row.project_name} />
+                                <input type="hidden" name="item_id" value={row.item_id} />
+                                <button
+                                  type="submit"
+                                  className="rounded-md border border-red-200 bg-red-50 text-red-700 px-2 py-1 text-xs font-medium whitespace-nowrap"
+                                >
+                                  삭제
+                                </button>
+                              </form>
+                            </div>
                           </td>
                         </tr>
                       ))}
