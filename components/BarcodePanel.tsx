@@ -4,17 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import JsBarcode from 'jsbarcode'
 import { createClient } from '@/lib/supabase/client'
 import type { Item } from '@/lib/supabase/types'
+import { buildItemLabelVariants } from '@/lib/items/labelVariants'
 import { Loader2, Package, PencilLine, Printer } from 'lucide-react'
 
-function getItemPayload(item: Item, sep: string): string | null {
-  const bc = item.barcode_code?.trim()
-  if (bc) return bc
-  const a = item.sh?.trim() ?? ''
-  const b = item.serial_number?.trim() ?? ''
-  if (a && b) return `${a}${sep}${b}`
-  if (a) return a
-  if (b) return b
-  return null
+function getItemLabelRows(item: Item, sep: string) {
+  return buildItemLabelVariants(item, sep).filter(row => row.payload)
 }
 
 function sanitizeFilePart(s: string): string {
@@ -107,7 +101,7 @@ export function BarcodePanel() {
       const next = new Set<string>()
       prev.forEach(id => {
         const item = items.find(i => i.id === id)
-        if (item && getItemPayload(item, s)) next.add(id)
+        if (item && getItemLabelRows(item, s).length > 0) next.add(id)
       })
       return next
     })
@@ -129,14 +123,17 @@ export function BarcodePanel() {
 
   const itemRows = useMemo(
     () =>
-      selectedList.map(item => ({
-        item,
-        payload: getItemPayload(item, sep || '|'),
-      })),
+      selectedList.flatMap(item =>
+        getItemLabelRows(item, sep || '|').map(row => ({
+          item,
+          unitIndex: row.index,
+          payload: row.payload!,
+        }))
+      ),
     [selectedList, sep]
   )
 
-  const validItemRows = useMemo(() => itemRows.filter(r => r.payload), [itemRows])
+  const validItemRows = itemRows
 
   const toggle = useCallback((id: string) => {
     setSelected(prev => {
@@ -152,7 +149,7 @@ export function BarcodePanel() {
       const next = new Set(prev)
       const s = sep || '|'
       filteredItems.forEach(i => {
-        if (getItemPayload(i, s)) next.add(i.id)
+        if (getItemLabelRows(i, s).length > 0) next.add(i.id)
       })
       return next
     })
@@ -198,11 +195,10 @@ export function BarcodePanel() {
     }
     if (validItemRows.length === 0) return
     for (let i = 0; i < validItemRows.length; i++) {
-      const { item, payload } = validItemRows[i]
-      if (!payload) continue
+      const { item, payload, unitIndex } = validItemRows[i]
       const blob = await drawToBlob(payload)
       if (blob) {
-        triggerDownload(blob, `barcode-${sanitizeFilePart(item.name)}-${i + 1}.png`)
+        triggerDownload(blob, `barcode-${sanitizeFilePart(item.name)}-${String(unitIndex).padStart(3, '0')}.png`)
         await new Promise(r => setTimeout(r, 250))
       }
     }
@@ -337,28 +333,28 @@ export function BarcodePanel() {
               </div>
               <div className="max-h-[min(52vh,360px)] overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
                 {filteredItems.map(item => {
-                  const p = getItemPayload(item, sep || '|')
+                  const pCount = getItemLabelRows(item, sep || '|').length
                   const checked = selected.has(item.id)
                   return (
                     <label
                       key={item.id}
                       className={`flex items-start gap-3 px-3 py-2.5 hover:bg-slate-50 ${
-                        p ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
+                        pCount > 0 ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
                       }`}
                     >
                       <input
                         type="checkbox"
-                        disabled={!p}
+                        disabled={pCount === 0}
                         checked={checked}
-                        onChange={() => p && toggle(item.id)}
+                        onChange={() => pCount > 0 && toggle(item.id)}
                         className="mt-1 rounded border-slate-300"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-slate-900 truncate">{item.name}</p>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          {p ? (
+                          {pCount > 0 ? (
                             <>
-                              인쇄값: <span className="font-mono text-slate-700">{p}</span>
+                              재고 기준 라벨: <span className="font-mono text-slate-700">{pCount}개</span>
                             </>
                           ) : (
                             <span className="text-amber-700">바코드·SH·시리얼 중 하나 이상 필요</span>
@@ -430,8 +426,13 @@ export function BarcodePanel() {
                   품목을 선택하세요. (바코드 값 또는 SH·시리얼이 있는 품목만 인쇄됩니다)
                 </span>
               ) : (
-                validItemRows.map(({ item, payload }) => (
-                  <BarcodeStrip key={item.id} payload={payload!} format={format} caption={item.name} />
+                validItemRows.map(({ item, payload, unitIndex }) => (
+                  <BarcodeStrip
+                    key={`${item.id}-${unitIndex}`}
+                    payload={payload}
+                    format={format}
+                    caption={`${item.name} #${unitIndex}`}
+                  />
                 ))
               )}
             </div>

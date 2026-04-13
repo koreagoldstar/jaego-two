@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { Item } from '@/lib/supabase/types'
 import { deleteItemsAction } from '@/app/(dashboard)/items/actions'
 import { ChevronRight, Loader2, Trash2 } from 'lucide-react'
@@ -14,7 +14,25 @@ type Props = {
 export function ItemsListClient({ items }: Props) {
   const router = useRouter()
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [query, setQuery] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(item =>
+      [
+        item.name,
+        item.sh ?? '',
+        item.barcode_code ?? '',
+        item.serial_number ?? '',
+        item.location ?? '',
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(q)
+    )
+  }, [items, query])
 
   const toggle = useCallback((id: string) => {
     setSelected(prev => {
@@ -26,8 +44,12 @@ export function ItemsListClient({ items }: Props) {
   }, [])
 
   const selectAll = useCallback(() => {
-    setSelected(new Set(items.map(i => i.id)))
-  }, [items])
+    setSelected(prev => {
+      const next = new Set(prev)
+      filteredItems.forEach(i => next.add(i.id))
+      return next
+    })
+  }, [filteredItems])
 
   const clearSelection = useCallback(() => setSelected(new Set()), [])
 
@@ -36,7 +58,7 @@ export function ItemsListClient({ items }: Props) {
   const onDeleteSelected = useCallback(async () => {
     if (count === 0) return
     const ok = window.confirm(
-      `선택한 ${count}개 품목을 삭제할까요?\n연결된 입출고 이력도 함께 삭제됩니다.`
+      `선택한 ${count}개 품목을 삭제할까요?\n삭제 내역은 이력에 남고, 연결된 입출고 이력은 함께 삭제됩니다.`
     )
     if (!ok) return
     setBusy(true)
@@ -50,10 +72,16 @@ export function ItemsListClient({ items }: Props) {
     router.refresh()
   }, [count, selected, clearSelection, router])
 
-  const allSelected = items.length > 0 && count === items.length
+  const allSelected = filteredItems.length > 0 && filteredItems.every(i => selected.has(i.id))
 
   return (
     <div className="space-y-3">
+      <input
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="품목명·바코드·SH·시리얼·위치 검색"
+        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
+      />
       {items.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
           <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -67,6 +95,10 @@ export function ItemsListClient({ items }: Props) {
             <span className="text-slate-500">·</span>
             <span className="text-slate-600">
               선택 <strong className="text-slate-900">{count}</strong>개
+            </span>
+            <span className="text-slate-500">·</span>
+            <span className="text-slate-600">
+              표시 <strong className="text-slate-900">{filteredItems.length}</strong>개
             </span>
           </div>
           <button
@@ -82,7 +114,7 @@ export function ItemsListClient({ items }: Props) {
       )}
 
       <ul className="space-y-2">
-        {items.map(item => {
+        {filteredItems.map(item => {
           const isOn = selected.has(item.id)
           return (
             <li key={item.id} className="flex gap-2 items-stretch">
@@ -115,6 +147,11 @@ export function ItemsListClient({ items }: Props) {
           )
         })}
       </ul>
+      {filteredItems.length === 0 && (
+        <p className="rounded-xl border border-dashed border-slate-300 bg-white p-4 text-center text-sm text-slate-500">
+          검색 결과가 없습니다.
+        </p>
+      )}
     </div>
   )
 }

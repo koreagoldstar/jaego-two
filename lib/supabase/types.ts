@@ -23,3 +23,14 @@ export type StockTransaction = {
   project: string | null
   created_at: string
 }
+
+export type InventoryEvent = {
+  id: string
+  user_id: string
+  item_id: string | null
+  event_type: 'item_create' | 'item_delete'
+  item_name: string
+  quantity: number
+  detail: string | null
+  created_at: string
+}

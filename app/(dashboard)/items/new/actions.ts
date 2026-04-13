@@ -5,6 +5,33 @@ import { allocateSequentialShCodes, formatShSequential, getNextShSequenceStart }
 import { generateBarcodeValue, generateSerialValue } from '@/lib/items/codeGeneratorsServer'
 import { redirect } from 'next/navigation'
 
+async function logInventoryEvents(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  rows: Array<{
+    user_id: string
+    item_id?: string | null
+    event_type: 'item_create' | 'item_delete'
+    item_name: string
+    quantity: number
+    detail?: string | null
+  }>
+) {
+  if (rows.length === 0) return
+  const { error } = await supabase.from('inventory_events').insert(
+    rows.map(r => ({
+      user_id: r.user_id,
+      item_id: r.item_id ?? null,
+      event_type: r.event_type,
+      item_name: r.item_name,
+      quantity: r.quantity,
+      detail: r.detail ?? '',
+    }))
+  )
+  if (error && !error.message.toLowerCase().includes('relation "inventory_events" does not exist')) {
+    throw error
+  }
+}
+
 export async function createItemAction(formData: FormData) {
   const supabase = await createClient()
   const {
@@ -40,6 +67,16 @@ export async function createItemAction(formData: FormData) {
   if (error) {
     redirect('/items/new?error=' + encodeURIComponent(error.message))
   }
+
+  await logInventoryEvents(supabase, [
+    {
+      user_id: user.id,
+      event_type: 'item_create',
+      item_name: name,
+      quantity,
+      detail: '품목 추가',
+    },
+  ])
   redirect('/items')
 }
 
@@ -108,10 +145,25 @@ export async function createItemsBatchAction(formData: FormData) {
     })
   }
 
-  const { error } = await supabase.from('items').insert(rows)
+  const { data: createdRows, error } = await supabase
+    .from('items')
+    .insert(rows)
+    .select('id, name, quantity')
 
   if (error) {
     redirect('/items/new?error=' + encodeURIComponent(error.message))
   }
+
+  await logInventoryEvents(
+    supabase,
+    (createdRows ?? []).map(row => ({
+      user_id: user.id,
+      item_id: row.id,
+      event_type: 'item_create' as const,
+      item_name: row.name,
+      quantity: row.quantity,
+      detail: '일괄 품목 추가',
+    }))
+  )
   redirect('/items')
 }

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Item } from '@/lib/supabase/types'
+import { buildItemLabelVariants } from '@/lib/items/labelVariants'
 import { Pencil } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
 
   if (!row) notFound()
   const item = row as Item
+  const labelRows = buildItemLabelVariants(item, '|')
 
   return (
     <div className="space-y-4 max-w-lg">
@@ -48,6 +50,27 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
           {item.location && <Row label="위치" value={item.location} />}
           {item.description && <Row label="메모" value={item.description} />}
         </dl>
+      </div>
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-slate-900">재고 수량 기준 라벨</h2>
+          <span className="text-xs text-slate-500">{labelRows.length}개</span>
+        </div>
+        {labelRows.length === 0 ? (
+          <p className="text-sm text-slate-500">현재 재고가 0개라 라벨이 없습니다.</p>
+        ) : (
+          <ul className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+            {labelRows.map(row => (
+              <li key={`${item.id}-${row.index}`} className="px-3 py-2 text-xs text-slate-700 space-y-1">
+                <p className="font-medium text-slate-900">#{row.index}</p>
+                {row.barcode && <p>바코드: {row.barcode}</p>}
+                {row.serial && <p>시리얼: {row.serial}</p>}
+                {row.payload && <p className="text-slate-500 break-all">인쇄값: {row.payload}</p>}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <Link

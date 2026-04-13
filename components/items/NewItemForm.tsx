@@ -117,12 +117,12 @@ export function NewItemForm({ initialError, defaultMode = 'single' }: Props) {
           </div>
 
           <div>
-            <label className="block text-sm text-slate-600 mb-1">초기 수량</label>
+            <label className="block text-sm text-slate-600 mb-1">초기 수량(재고 개수)</label>
             <input
               name="quantity"
               type="number"
               min={0}
-              defaultValue={0}
+              defaultValue={1}
               className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
             />
           </div>
@@ -210,14 +210,15 @@ export function NewItemForm({ initialError, defaultMode = 'single' }: Props) {
           </div>
 
           <div>
-            <label className="block text-sm text-slate-600 mb-1">품목당 초기 수량</label>
+            <label className="block text-sm text-slate-600 mb-1">품목당 재고 수량(라벨 개수 기준)</label>
             <input
               name="bulk_quantity"
               type="number"
               min={0}
-              defaultValue={0}
+              defaultValue={1}
               className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
+            <p className="text-xs text-slate-500 mt-1">입력한 수량만큼 품목 상세/바코드에서 개별 라벨이 생성됩니다.</p>
           </div>
           <Field label="위치 (공통)" name="bulk_location" placeholder="선반 A-1" />
           <div>

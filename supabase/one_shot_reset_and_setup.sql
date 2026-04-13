@@ -21,6 +21,7 @@ begin
 end $$;
 
 -- 2) 테이블 (의존 순서: 자식 → 부모)
+drop table if exists public.inventory_events cascade;
 drop table if exists public.stock_transactions cascade;
 drop table if exists public.items cascade;
 
@@ -56,12 +57,25 @@ create table public.stock_transactions (
   created_at timestamptz not null default now()
 );
 
+create table public.inventory_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  item_id uuid null references public.items (id) on delete set null,
+  event_type text not null check (event_type in ('item_create', 'item_delete')),
+  item_name text not null,
+  quantity integer not null default 0 check (quantity >= 0),
+  detail text default '',
+  created_at timestamptz not null default now()
+);
+
 create index items_user_idx on public.items (user_id);
 create index stock_tx_user_idx on public.stock_transactions (user_id);
 create index stock_tx_item_idx on public.stock_transactions (item_id);
+create index inventory_events_user_idx on public.inventory_events (user_id, created_at desc);
 
 alter table public.items enable row level security;
 alter table public.stock_transactions enable row level security;
+alter table public.inventory_events enable row level security;
 
 create policy items_select on public.items for select using (auth.uid() = user_id);
 create policy items_insert on public.items for insert with check (auth.uid() = user_id);
@@ -72,6 +86,11 @@ create policy tx_select on public.stock_transactions for select using (auth.uid(
 create policy tx_insert on public.stock_transactions for insert with check (auth.uid() = user_id);
 create policy tx_update on public.stock_transactions for update using (auth.uid() = user_id);
 create policy tx_delete on public.stock_transactions for delete using (auth.uid() = user_id);
+
+create policy inventory_events_select on public.inventory_events for select using (auth.uid() = user_id);
+create policy inventory_events_insert on public.inventory_events for insert with check (auth.uid() = user_id);
+create policy inventory_events_update on public.inventory_events for update using (auth.uid() = user_id);
+create policy inventory_events_delete on public.inventory_events for delete using (auth.uid() = user_id);
 
 create or replace function public.apply_stock_move(
   p_item_id uuid,

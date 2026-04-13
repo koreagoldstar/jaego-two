@@ -4,6 +4,14 @@ import type { StockTransaction } from '@/lib/supabase/types'
 export const dynamic = 'force-dynamic'
 
 type Row = StockTransaction & { items: { name: string } | null }
+type InventoryEventRow = {
+  id: string
+  event_type: 'item_create' | 'item_delete'
+  item_name: string
+  quantity: number
+  detail: string | null
+  created_at: string
+}
 
 export default async function TransactionsPage() {
   const supabase = await createClient()
@@ -20,6 +28,34 @@ export default async function TransactionsPage() {
     .limit(200)
 
   const list = (rows ?? []) as unknown as Row[]
+  const { data: eventRows, error: eventError } = await supabase
+    .from('inventory_events')
+    .select('id, event_type, item_name, quantity, detail, created_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  const inventoryEvents = eventError ? [] : ((eventRows ?? []) as InventoryEventRow[])
+  const merged = [
+    ...list.map(tx => ({
+      id: `tx-${tx.id}`,
+      created_at: tx.created_at,
+      title: tx.items?.name ?? '품목',
+      subtitle: [tx.project, tx.note].filter(Boolean).join(' · '),
+      amountText: `${tx.direction === 'in' ? '+' : '−'}${tx.amount}`,
+      amountClass: tx.direction === 'in' ? 'text-emerald-600' : 'text-orange-600',
+    })),
+    ...inventoryEvents.map(ev => ({
+      id: `ev-${ev.id}`,
+      created_at: ev.created_at,
+      title: ev.item_name,
+      subtitle: ev.detail ?? '',
+      amountText: ev.event_type === 'item_create' ? `+등록 ${ev.quantity}` : `-삭제 ${ev.quantity}`,
+      amountClass: ev.event_type === 'item_create' ? 'text-blue-600' : 'text-rose-600',
+    })),
+  ]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 200)
 
   return (
     <div className="space-y-4">
@@ -28,34 +64,26 @@ export default async function TransactionsPage() {
         <p className="text-sm text-slate-500">최근 200건</p>
       </div>
 
-      {list.length === 0 ? (
+      {merged.length === 0 ? (
         <p className="text-sm text-slate-500 rounded-2xl border border-dashed border-slate-300 p-8 text-center bg-white">
           기록이 없습니다.
         </p>
       ) : (
         <ul className="space-y-2">
-          {list.map(tx => (
+          {merged.map(tx => (
             <li
               key={tx.id}
               className="rounded-2xl bg-white border border-slate-200 px-4 py-3 shadow-sm flex justify-between gap-3 text-sm"
             >
               <div className="min-w-0">
-                <p className="font-medium text-slate-900 truncate">{tx.items?.name ?? '품목'}</p>
+                <p className="font-medium text-slate-900 truncate">{tx.title}</p>
                 <p className="text-xs text-slate-400">
                   {new Date(tx.created_at).toLocaleString('ko-KR')}
-                  {tx.project ? ` · ${tx.project}` : ''}
-                  {tx.note ? ` · ${tx.note}` : ''}
+                  {tx.subtitle ? ` · ${tx.subtitle}` : ''}
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <span
-                  className={`inline-block font-semibold tabular-nums ${
-                    tx.direction === 'in' ? 'text-emerald-600' : 'text-orange-600'
-                  }`}
-                >
-                  {tx.direction === 'in' ? '+' : '−'}
-                  {tx.amount}
-                </span>
+                <span className={`inline-block font-semibold tabular-nums ${tx.amountClass}`}>{tx.amountText}</span>
               </div>
             </li>
           ))}
