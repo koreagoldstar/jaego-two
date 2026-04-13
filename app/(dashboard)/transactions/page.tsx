@@ -3,7 +3,9 @@ import type { StockTransaction } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
-type Row = StockTransaction & { items: { name: string } | null }
+type Row = StockTransaction & {
+  items: { name: string; sh: string | null; serial_number: string | null; barcode_code: string | null } | null
+}
 type InventoryEventRow = {
   id: string
   event_type: 'item_create' | 'item_delete'
@@ -22,7 +24,7 @@ export default async function TransactionsPage() {
 
   const { data: rows } = await supabase
     .from('stock_transactions')
-    .select('id, direction, amount, note, project, created_at, items(name)')
+    .select('id, direction, amount, note, project, created_at, items(name, sh, serial_number, barcode_code)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -42,6 +44,12 @@ export default async function TransactionsPage() {
       created_at: tx.created_at,
       title: tx.items?.name ?? '품목',
       subtitle: [tx.project, tx.note].filter(Boolean).join(' · '),
+      detailLines: [
+        `구분: ${tx.direction === 'in' ? '입고' : '출고'}`,
+        tx.items?.sh ? `SH: ${tx.items.sh}` : '',
+        tx.items?.serial_number ? `시리얼: ${tx.items.serial_number}` : '',
+        tx.items?.barcode_code ? `바코드: ${tx.items.barcode_code}` : '',
+      ].filter(Boolean),
       amountText: `${tx.direction === 'in' ? '+' : '−'}${tx.amount}`,
       amountClass: tx.direction === 'in' ? 'text-emerald-600' : 'text-orange-600',
     })),
@@ -50,6 +58,7 @@ export default async function TransactionsPage() {
       created_at: ev.created_at,
       title: ev.item_name,
       subtitle: ev.detail ?? '',
+      detailLines: [`구분: ${ev.event_type === 'item_create' ? '품목 등록' : '품목 삭제'}`],
       amountText: ev.event_type === 'item_create' ? `+등록 ${ev.quantity}` : `-삭제 ${ev.quantity}`,
       amountClass: ev.event_type === 'item_create' ? 'text-blue-600' : 'text-rose-600',
     })),
@@ -81,6 +90,15 @@ export default async function TransactionsPage() {
                   {new Date(tx.created_at).toLocaleString('ko-KR')}
                   {tx.subtitle ? ` · ${tx.subtitle}` : ''}
                 </p>
+                {tx.detailLines.length > 0 && (
+                  <div className="mt-1 space-y-0.5">
+                    {tx.detailLines.map(line => (
+                      <p key={`${tx.id}-${line}`} className="text-[11px] text-slate-500 break-all">
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="shrink-0 text-right">
                 <span className={`inline-block font-semibold tabular-nums ${tx.amountClass}`}>{tx.amountText}</span>
