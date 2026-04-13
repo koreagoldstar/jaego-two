@@ -68,7 +68,7 @@ function BarcodeStrip({
         format,
         width: 2,
         height: barcodeHeight,
-        displayValue: true,
+        displayValue: false,
         margin: compactLabel ? 1 : 3,
         fontSize: compactLabel ? 8 : 10,
       })
@@ -517,7 +517,7 @@ export function BarcodePanel() {
                   품목을 선택하세요. (바코드 값 또는 SH·시리얼이 있는 품목만 인쇄됩니다)
                 </span>
               ) : (
-                validItemRows.map(({ item, payload, unitIndex, serial, barcode }) => (
+                validItemRows.map(({ item, payload, unitIndex, serial }) => (
                   <BarcodeStrip
                     key={`${item.id}-${unitIndex}`}
                     payload={payload}
@@ -526,8 +526,8 @@ export function BarcodePanel() {
                     metaLines={[
                       item.sh ? `SH: ${item.quantity > 1 ? `${item.sh}-${String(unitIndex).padStart(3, '0')}` : item.sh}` : '',
                       serial ? `Serial: ${serial}` : '',
-                      barcode ? `Barcode: ${barcode}` : '',
                     ].filter(Boolean)}
+                    showEncodingLine={false}
                     paperHeightMm={paperPreset.heightMm}
                   />
                 ))
