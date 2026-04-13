@@ -63,27 +63,44 @@ export default async function StockOverviewPage({
   const totalPlanned = rows.reduce((s, r) => s + r.plannedQty, 0)
   const totalRemain = rows.reduce((s, r) => s + r.remainQty, 0)
 
-  const projectItemRows = filteredPlans
-    .map(plan => {
-      const item = items.find(i => i.id === plan.item_id)
-      const currentQty = item?.quantity ?? 0
-      const plannedQty = plan.planned_qty ?? 0
-      return {
-        project: plan.project_name,
-        installDate: plan.install_date,
-        itemName: item?.name ?? '품목',
-        itemSh: item?.sh ?? '',
-        currentQty,
-        plannedQty,
-        remainQty: currentQty - plannedQty,
-      }
-    })
+  const projectMetaMap = new Map<string, string | null>()
+  for (const plan of filteredPlans) {
+    const existing = projectMetaMap.get(plan.project_name)
+    if (!existing && plan.install_date) {
+      projectMetaMap.set(plan.project_name, plan.install_date)
+    } else if (!projectMetaMap.has(plan.project_name)) {
+      projectMetaMap.set(plan.project_name, plan.install_date ?? null)
+    }
+  }
+
+  const projectColumns = Array.from(projectMetaMap.entries())
+    .map(([project, installDate]) => ({ project, installDate }))
     .sort((a, b) => {
       if (a.installDate && b.installDate) return a.installDate.localeCompare(b.installDate) || a.project.localeCompare(b.project)
       if (a.installDate) return -1
       if (b.installDate) return 1
-      return a.project.localeCompare(b.project) || a.itemName.localeCompare(b.itemName)
+      return a.project.localeCompare(b.project)
     })
+
+  const plannedMatrix = new Map<string, Map<string, number>>()
+  for (const plan of filteredPlans) {
+    const byProject = plannedMatrix.get(plan.item_id) ?? new Map<string, number>()
+    byProject.set(plan.project_name, (byProject.get(plan.project_name) ?? 0) + (plan.planned_qty ?? 0))
+    plannedMatrix.set(plan.item_id, byProject)
+  }
+
+  const itemProjectRows = items.map(item => {
+    const byProject = plannedMatrix.get(item.id) ?? new Map<string, number>()
+    const plannedTotal = Array.from(byProject.values()).reduce((s, v) => s + v, 0)
+    return {
+      id: item.id,
+      name: item.name,
+      sh: item.sh ?? '',
+      currentQty: item.quantity ?? 0,
+      byProject,
+      remainQty: (item.quantity ?? 0) - plannedTotal,
+    }
+  })
 
   return (
     <div className="space-y-4">
@@ -165,37 +182,45 @@ export default async function StockOverviewPage({
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
         <div className="px-3 pt-3">
           <h2 className="text-base font-semibold text-slate-900">프로젝트 전체 요약 (설치일정 순)</h2>
-          <p className="text-xs text-slate-500 mt-0.5">각 프로젝트의 품목별 현재재고/사용예정/잔여수량을 보여줍니다.</p>
+          <p className="text-xs text-slate-500 mt-0.5">품목별 현재수량과 프로젝트별 사용예정, 잔여수량을 한 번에 보여줍니다.</p>
         </div>
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-slate-500">
-              <th className="py-2.5 px-3">설치일정</th>
-              <th className="py-2.5 px-3">프로젝트</th>
               <th className="py-2.5 px-3">품목</th>
-              <th className="py-2.5 px-3">SH</th>
               <th className="py-2.5 px-3 text-right">현재재고</th>
-              <th className="py-2.5 px-3 text-right">사용예정</th>
+              {projectColumns.map(col => (
+                <th key={col.project} className="py-2.5 px-3 text-right whitespace-nowrap">
+                  <div className="flex flex-col items-end leading-tight">
+                    <span>{col.project}</span>
+                    <span className="text-[11px] text-slate-400">{col.installDate || '미정'}</span>
+                  </div>
+                </th>
+              ))}
               <th className="py-2.5 px-3 text-right">잔여수량</th>
             </tr>
           </thead>
           <tbody>
-            {projectItemRows.map((row, idx) => (
-              <tr key={`${row.project}-${row.itemName}-${idx}`} className="border-b border-slate-100 last:border-0">
-                <td className="py-2.5 px-3 text-slate-700">{row.installDate || '미정'}</td>
-                <td className="py-2.5 px-3 text-slate-900">{row.project}</td>
-                <td className="py-2.5 px-3 text-slate-900">{row.itemName}</td>
-                <td className="py-2.5 px-3 text-slate-500">{row.itemSh || '-'}</td>
+            {itemProjectRows.map(row => (
+              <tr key={row.id} className="border-b border-slate-100 last:border-0">
+                <td className="py-2.5 px-3 text-slate-900 whitespace-nowrap">
+                  {row.name}
+                  {row.sh ? <span className="text-slate-400 text-xs ml-1">({row.sh})</span> : null}
+                </td>
                 <td className="py-2.5 px-3 text-right tabular-nums">{row.currentQty}</td>
-                <td className="py-2.5 px-3 text-right tabular-nums text-violet-700">{row.plannedQty}</td>
+                {projectColumns.map(col => (
+                  <td key={`${row.id}-${col.project}`} className="py-2.5 px-3 text-right tabular-nums text-violet-700">
+                    {row.byProject.get(col.project) ?? 0}
+                  </td>
+                ))}
                 <td className={`py-2.5 px-3 text-right tabular-nums font-medium ${row.remainQty < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
                   {row.remainQty}
                 </td>
               </tr>
             ))}
-            {projectItemRows.length === 0 && (
+            {itemProjectRows.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-500">
+                <td colSpan={projectColumns.length + 3} className="py-8 text-center text-slate-500">
                   프로젝트 예정 데이터가 없습니다.
                 </td>
               </tr>
