@@ -73,6 +73,7 @@ create table public.project_usage_plans (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   project_name text not null,
+  install_date date,
   item_id uuid not null references public.items (id) on delete cascade,
   planned_qty integer not null default 0 check (planned_qty >= 0),
   created_at timestamptz not null default now(),
@@ -85,6 +86,7 @@ create index stock_tx_item_idx on public.stock_transactions (item_id);
 create index inventory_events_user_idx on public.inventory_events (user_id, created_at desc);
 create unique index project_usage_plans_unique on public.project_usage_plans (user_id, project_name, item_id);
 create index project_usage_plans_user_idx on public.project_usage_plans (user_id, project_name);
+create index project_usage_plans_install_date_idx on public.project_usage_plans (user_id, install_date, project_name);
 
 alter table public.items enable row level security;
 alter table public.stock_transactions enable row level security;

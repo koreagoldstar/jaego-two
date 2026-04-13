@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 
 type PlanRow = {
   project_name: string
+  install_date: string | null
   item_id: string
   planned_qty: number
 }
@@ -28,7 +29,7 @@ export default async function ProjectsPage() {
     supabase.from('items').select('id, name, quantity').eq('user_id', user.id).order('name'),
     supabase
       .from('project_usage_plans')
-      .select('project_name, item_id, planned_qty')
+      .select('project_name, install_date, item_id, planned_qty')
       .eq('user_id', user.id)
       .order('project_name')
       .order('created_at', { ascending: true }),
@@ -75,6 +76,7 @@ export default async function ProjectsPage() {
   }
 
   const grouped = new Map<string, Array<PlanRow & { shipped: number; remaining: number }>>()
+  const projectInstallDate = new Map<string, string | null>()
   for (const row of plans) {
     const k = `${row.project_name}::${row.item_id}`
     const shipped = Math.max(0, shippedMap.get(k) ?? 0)
@@ -82,9 +84,21 @@ export default async function ProjectsPage() {
     const list = grouped.get(row.project_name) ?? []
     list.push({ ...row, shipped, remaining })
     grouped.set(row.project_name, list)
+    if (!projectInstallDate.has(row.project_name)) {
+      projectInstallDate.set(row.project_name, row.install_date ?? null)
+    } else if (!projectInstallDate.get(row.project_name) && row.install_date) {
+      projectInstallDate.set(row.project_name, row.install_date)
+    }
   }
 
-  const projectNames = Array.from(grouped.keys()).sort((a, b) => a.localeCompare(b))
+  const projectNames = Array.from(grouped.keys()).sort((a, b) => {
+    const da = projectInstallDate.get(a) ?? ''
+    const db = projectInstallDate.get(b) ?? ''
+    if (da && db) return da.localeCompare(db) || a.localeCompare(b)
+    if (da) return -1
+    if (db) return 1
+    return a.localeCompare(b)
+  })
 
   return (
     <div className="space-y-4">
@@ -95,10 +109,14 @@ export default async function ProjectsPage() {
 
       <form action={saveProjectPlanAction} className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
         <p className="text-sm font-semibold text-slate-900">사용예정 재고 입력/수정</p>
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <div>
             <label className="block text-sm text-slate-600 mb-1">프로젝트명</label>
             <input name="project_name" required className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-600 mb-1">설치 일정</label>
+            <input name="install_date" type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
           </div>
           <div>
             <label className="block text-sm text-slate-600 mb-1">품목</label>
@@ -138,7 +156,12 @@ export default async function ProjectsPage() {
             const rows = grouped.get(projectName) ?? []
             return (
               <section key={projectName} className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
-                <h2 className="text-base font-semibold text-slate-900">{projectName}</h2>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-base font-semibold text-slate-900">{projectName}</h2>
+                  <span className="text-xs text-slate-500">
+                    설치 일정: {projectInstallDate.get(projectName) || '미정'}
+                  </span>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead>
@@ -165,6 +188,7 @@ export default async function ProjectsPage() {
                             <div className="flex justify-end gap-2">
                               <form action={saveProjectPlanAction} className="flex items-center gap-1.5">
                                 <input type="hidden" name="project_name" value={row.project_name} />
+                                <input type="hidden" name="install_date" value={row.install_date ?? ''} />
                                 <input type="hidden" name="item_id" value={row.item_id} />
                                 <input
                                   name="planned_qty"

@@ -39,6 +39,7 @@ export type ProjectUsagePlan = {
   id: string
   user_id: string
   project_name: string
+  install_date: string | null
   item_id: string
   planned_qty: number
   created_at: string

@@ -4,6 +4,8 @@ import type { Item } from '@/lib/supabase/types'
 export const dynamic = 'force-dynamic'
 
 type PlanSumRow = {
+  project_name: string
+  install_date: string | null
   item_id: string
   planned_qty: number
 }
@@ -21,11 +23,14 @@ export default async function StockOverviewPage({
 
   const [itemsRes, plansRes] = await Promise.all([
     supabase.from('items').select('id, name, quantity, sh').eq('user_id', user.id).order('name'),
-    supabase.from('project_usage_plans').select('project_name, item_id, planned_qty').eq('user_id', user.id),
+    supabase
+      .from('project_usage_plans')
+      .select('project_name, install_date, item_id, planned_qty')
+      .eq('user_id', user.id),
   ])
 
   const items = (itemsRes.data ?? []) as Item[]
-  const plans = (plansRes.data ?? []) as (PlanSumRow & { project_name: string })[]
+  const plans = (plansRes.data ?? []) as PlanSumRow[]
   const allProjects = Array.from(new Set(plans.map(p => p.project_name).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b)
   )
@@ -57,6 +62,40 @@ export default async function StockOverviewPage({
   const totalCurrent = rows.reduce((s, r) => s + r.currentQty, 0)
   const totalPlanned = rows.reduce((s, r) => s + r.plannedQty, 0)
   const totalRemain = rows.reduce((s, r) => s + r.remainQty, 0)
+
+  const projectSummaryMap = new Map<
+    string,
+    { installDate: string | null; planned: number; current: number; remain: number }
+  >()
+  for (const plan of plans) {
+    const entry = projectSummaryMap.get(plan.project_name) ?? {
+      installDate: plan.install_date ?? null,
+      planned: 0,
+      current: 0,
+      remain: 0,
+    }
+    const currentQty = items.find(i => i.id === plan.item_id)?.quantity ?? 0
+    entry.installDate = entry.installDate ?? plan.install_date ?? null
+    entry.planned += plan.planned_qty ?? 0
+    entry.current += currentQty
+    entry.remain += currentQty - (plan.planned_qty ?? 0)
+    projectSummaryMap.set(plan.project_name, entry)
+  }
+
+  const projectRows = Array.from(projectSummaryMap.entries())
+    .map(([project, data]) => ({
+      project,
+      installDate: data.installDate,
+      currentQty: data.current,
+      plannedQty: data.planned,
+      remainQty: data.remain,
+    }))
+    .sort((a, b) => {
+      if (a.installDate && b.installDate) return a.installDate.localeCompare(b.installDate) || a.project.localeCompare(b.project)
+      if (a.installDate) return -1
+      if (b.installDate) return 1
+      return a.project.localeCompare(b.project)
+    })
 
   return (
     <div className="space-y-4">
@@ -128,6 +167,44 @@ export default async function StockOverviewPage({
               <tr>
                 <td colSpan={5} className="py-8 text-center text-slate-500">
                   품목 데이터가 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-x-auto">
+        <div className="px-3 pt-3">
+          <h2 className="text-base font-semibold text-slate-900">프로젝트 전체 요약 (설치일정 순)</h2>
+          <p className="text-xs text-slate-500 mt-0.5">각 프로젝트별 현재재고/사용예정/잔여수량 합계를 보여줍니다.</p>
+        </div>
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-slate-500">
+              <th className="py-2.5 px-3">설치일정</th>
+              <th className="py-2.5 px-3">프로젝트</th>
+              <th className="py-2.5 px-3 text-right">현재재고</th>
+              <th className="py-2.5 px-3 text-right">사용예정</th>
+              <th className="py-2.5 px-3 text-right">잔여수량</th>
+            </tr>
+          </thead>
+          <tbody>
+            {projectRows.map(row => (
+              <tr key={row.project} className="border-b border-slate-100 last:border-0">
+                <td className="py-2.5 px-3 text-slate-700">{row.installDate || '미정'}</td>
+                <td className="py-2.5 px-3 text-slate-900">{row.project}</td>
+                <td className="py-2.5 px-3 text-right tabular-nums">{row.currentQty}</td>
+                <td className="py-2.5 px-3 text-right tabular-nums text-violet-700">{row.plannedQty}</td>
+                <td className={`py-2.5 px-3 text-right tabular-nums font-medium ${row.remainQty < 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                  {row.remainQty}
+                </td>
+              </tr>
+            ))}
+            {projectRows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="py-8 text-center text-slate-500">
+                  프로젝트 예정 데이터가 없습니다.
                 </td>
               </tr>
             )}

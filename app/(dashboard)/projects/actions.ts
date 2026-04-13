@@ -11,6 +11,7 @@ export async function saveProjectPlanAction(formData: FormData) {
   if (!user) return
 
   const project_name = String(formData.get('project_name') ?? '').trim()
+  const install_date = String(formData.get('install_date') ?? '').trim()
   const item_id = String(formData.get('item_id') ?? '').trim()
   const planned_qty = Math.max(0, parseInt(String(formData.get('planned_qty') ?? '0'), 10) || 0)
 
@@ -31,6 +32,7 @@ export async function saveProjectPlanAction(formData: FormData) {
     {
       user_id: user.id,
       project_name,
+      install_date: install_date || null,
       item_id,
       planned_qty,
     },
@@ -38,6 +40,7 @@ export async function saveProjectPlanAction(formData: FormData) {
   )
 
   revalidatePath('/projects')
+  revalidatePath('/stock-overview')
 }
 
 export async function deleteProjectPlanAction(formData: FormData) {
@@ -59,4 +62,5 @@ export async function deleteProjectPlanAction(formData: FormData) {
     .eq('item_id', item_id)
 
   revalidatePath('/projects')
+  revalidatePath('/stock-overview')
 }
