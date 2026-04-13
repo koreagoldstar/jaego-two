@@ -290,11 +290,9 @@ export function BarcodePanel() {
     }
   }
 
-  async function printBarcode() {
+  function printBarcode() {
     if (mode === 'manual' && !manualPayload) return
     if (mode === 'items' && validItemRows.length === 0) return
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=520,height=760')
-    if (!printWindow) return
 
     const labels =
       mode === 'manual'
@@ -331,13 +329,27 @@ export function BarcodePanel() {
       .filter(Boolean)
       .join('')
 
-    if (!htmlLabels) {
-      printWindow.close()
+    if (!htmlLabels) return
+
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.right = '0'
+    iframe.style.bottom = '0'
+    iframe.style.width = '0'
+    iframe.style.height = '0'
+    iframe.style.border = '0'
+    iframe.setAttribute('aria-hidden', 'true')
+    document.body.appendChild(iframe)
+
+    const frameDoc = iframe.contentDocument
+    const frameWin = iframe.contentWindow
+    if (!frameDoc || !frameWin) {
+      iframe.remove()
       return
     }
 
-    printWindow.document.open()
-    printWindow.document.write(`<!doctype html>
+    frameDoc.open()
+    frameDoc.write(`<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -387,10 +399,32 @@ export function BarcodePanel() {
   </head>
   <body>${htmlLabels}</body>
 </html>`)
-    printWindow.document.close()
-    printWindow.focus()
-    printWindow.print()
-    printWindow.close()
+    frameDoc.close()
+
+    const finalize = () => {
+      frameWin.focus()
+      frameWin.print()
+      setTimeout(() => iframe.remove(), 1500)
+    }
+
+    const images = Array.from(frameDoc.images)
+    if (images.length === 0) {
+      setTimeout(finalize, 50)
+      return
+    }
+
+    let pending = images.length
+    const onDone = () => {
+      pending -= 1
+      if (pending <= 0) setTimeout(finalize, 50)
+    }
+    images.forEach(img => {
+      if (img.complete) onDone()
+      else {
+        img.addEventListener('load', onDone, { once: true })
+        img.addEventListener('error', onDone, { once: true })
+      }
+    })
   }
 
   const canPrint =
@@ -674,7 +708,7 @@ export function BarcodePanel() {
         <button
           type="button"
           disabled={!canPrint}
-          onClick={() => void printBarcode()}
+          onClick={printBarcode}
           className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 text-white font-medium py-3 shadow-sm disabled:opacity-40 active:scale-[0.99]"
         >
           <Printer className="w-5 h-5 shrink-0" aria-hidden />
