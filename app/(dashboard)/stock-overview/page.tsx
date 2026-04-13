@@ -8,7 +8,11 @@ type PlanSumRow = {
   planned_qty: number
 }
 
-export default async function StockOverviewPage() {
+export default async function StockOverviewPage({
+  searchParams,
+}: {
+  searchParams?: { project?: string }
+}) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -17,14 +21,22 @@ export default async function StockOverviewPage() {
 
   const [itemsRes, plansRes] = await Promise.all([
     supabase.from('items').select('id, name, quantity, sh').eq('user_id', user.id).order('name'),
-    supabase.from('project_usage_plans').select('item_id, planned_qty').eq('user_id', user.id),
+    supabase.from('project_usage_plans').select('project_name, item_id, planned_qty').eq('user_id', user.id),
   ])
 
   const items = (itemsRes.data ?? []) as Item[]
-  const plans = (plansRes.data ?? []) as PlanSumRow[]
+  const plans = (plansRes.data ?? []) as (PlanSumRow & { project_name: string })[]
+  const allProjects = Array.from(new Set(plans.map(p => p.project_name).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b)
+  )
+
+  const selectedProject = (searchParams?.project ?? '').trim()
+  const filteredPlans = selectedProject
+    ? plans.filter(row => row.project_name === selectedProject)
+    : plans
 
   const plannedByItem = new Map<string, number>()
-  for (const row of plans) {
+  for (const row of filteredPlans) {
     plannedByItem.set(row.item_id, (plannedByItem.get(row.item_id) ?? 0) + (row.planned_qty ?? 0))
   }
 
@@ -52,6 +64,27 @@ export default async function StockOverviewPage() {
         <h1 className="text-xl font-bold text-slate-900">재고 요약표</h1>
         <p className="text-sm text-slate-500">품목별 현재재고 · 사용예정 · 잔여수량을 한 번에 확인합니다.</p>
       </div>
+
+      <form method="get" className="rounded-xl border border-slate-200 bg-white p-3 flex flex-wrap items-end gap-2">
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">프로젝트 필터</label>
+          <select
+            name="project"
+            defaultValue={selectedProject}
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white min-w-56"
+          >
+            <option value="">전체 프로젝트(합산)</option>
+            {allProjects.map(name => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" className="rounded-lg bg-slate-900 text-white px-3 py-2 text-sm font-medium">
+          적용
+        </button>
+      </form>
 
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-slate-200 bg-white p-3">
