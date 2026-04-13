@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { saveProjectPlanBatchAction } from '@/app/(dashboard)/projects/actions'
 
@@ -17,10 +18,23 @@ type Row = {
 }
 
 export function ProjectPlanMultiForm({ items }: { items: ItemOption[] }) {
+  const router = useRouter()
+  const formRef = useRef<HTMLFormElement>(null)
+  const [pending, startTransition] = useTransition()
   const [rows, setRows] = useState<Row[]>([{ id: crypto.randomUUID(), item_id: '', planned_qty: 0 }])
+  const resetRows = () => setRows([{ id: crypto.randomUUID(), item_id: '', planned_qty: 0 }])
+
+  const action = (formData: FormData) => {
+    startTransition(async () => {
+      await saveProjectPlanBatchAction(formData)
+      formRef.current?.reset()
+      resetRows()
+      router.refresh()
+    })
+  }
 
   return (
-    <form action={saveProjectPlanBatchAction} className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
+    <form ref={formRef} action={action} className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
       <p className="text-sm font-semibold text-slate-900">사용예정 재고 입력/수정</p>
       <div className="grid gap-3 md:grid-cols-3">
         <div>
@@ -94,7 +108,7 @@ export function ProjectPlanMultiForm({ items }: { items: ItemOption[] }) {
 
       <p className="text-xs text-slate-500">수량 0으로 저장하면 해당 프로젝트-품목 예정치가 삭제됩니다.</p>
       <button type="submit" className="rounded-xl bg-blue-600 text-white px-4 py-2.5 text-sm font-medium">
-        일괄 저장
+        {pending ? '저장 중…' : '일괄 저장'}
       </button>
     </form>
   )

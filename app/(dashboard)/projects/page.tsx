@@ -13,10 +13,12 @@ type PlanRow = {
 }
 
 type TxRow = {
+  created_at: string
   project: string | null
   item_id: string
   direction: 'in' | 'out'
   amount: number
+  items: { name: string }[] | null
 }
 
 export default async function ProjectsPage() {
@@ -36,7 +38,7 @@ export default async function ProjectsPage() {
       .order('created_at', { ascending: true }),
     supabase
       .from('stock_transactions')
-      .select('project, item_id, direction, amount')
+      .select('created_at, project, item_id, direction, amount, items(name)')
       .eq('user_id', user.id)
       .not('project', 'is', null)
       .neq('project', ''),
@@ -101,6 +103,21 @@ export default async function ProjectsPage() {
     return a.localeCompare(b)
   })
 
+  const completedOutRows = txRows
+    .filter(tx => tx.direction === 'out')
+    .map(tx => {
+      const project = (tx.project ?? '').trim()
+      return {
+        created_at: tx.created_at,
+        project,
+        install_date: projectInstallDate.get(project) ?? null,
+        item_name: tx.items?.[0]?.name ?? (itemById.get(tx.item_id)?.name ?? '품목'),
+        amount: tx.amount,
+      }
+    })
+    .filter(row => row.project)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+
   return (
     <div className="space-y-4">
       <div>
@@ -111,6 +128,22 @@ export default async function ProjectsPage() {
       <ProjectPlanMultiForm
         items={items.map(item => ({ id: item.id, name: item.name, quantity: item.quantity ?? 0 }))}
       />
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm flex flex-wrap items-center gap-2">
+        <p className="text-sm font-medium text-slate-800 mr-1">엑셀 다운로드</p>
+        <a
+          href="/api/projects/export?type=plans"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          사용예정 재고 (CSV)
+        </a>
+        <a
+          href="/api/projects/export?type=history"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          프로젝트 출고 이력 (CSV)
+        </a>
+      </div>
 
       {projectNames.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 bg-white">
@@ -192,6 +225,38 @@ export default async function ProjectsPage() {
           })}
         </div>
       )}
+
+      <section className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
+        <h2 className="text-base font-semibold text-slate-900">프로젝트 출고 완료 이력</h2>
+        {completedOutRows.length === 0 ? (
+          <p className="text-sm text-slate-500">출고 완료 이력이 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-500 border-b border-slate-200">
+                  <th className="py-2 pr-3">출고일시</th>
+                  <th className="py-2 pr-3">설치일자</th>
+                  <th className="py-2 pr-3">프로젝트</th>
+                  <th className="py-2 pr-3">품목</th>
+                  <th className="py-2 text-right">수량</th>
+                </tr>
+              </thead>
+              <tbody>
+                {completedOutRows.map((row, idx) => (
+                  <tr key={`${row.project}-${row.item_name}-${row.created_at}-${idx}`} className="border-b border-slate-100 last:border-0">
+                    <td className="py-2 pr-3 text-slate-700">{new Date(row.created_at).toLocaleString('ko-KR')}</td>
+                    <td className="py-2 pr-3 text-slate-700">{row.install_date ?? '미정'}</td>
+                    <td className="py-2 pr-3 text-slate-900">{row.project}</td>
+                    <td className="py-2 pr-3 text-slate-900">{row.item_name}</td>
+                    <td className="py-2 text-right tabular-nums text-orange-700">{row.amount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }
