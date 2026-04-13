@@ -39,6 +39,7 @@ function BarcodeStrip({
   payload,
   format,
   caption,
+  metaLines = [],
   showEncodingLine = true,
   paperWidthMm,
   paperHeightMm,
@@ -46,6 +47,7 @@ function BarcodeStrip({
   payload: string
   format: 'CODE128' | 'CODE39'
   caption?: string
+  metaLines?: string[]
   showEncodingLine?: boolean
   paperWidthMm: number
   paperHeightMm: number
@@ -83,6 +85,15 @@ function BarcodeStrip({
     >
       {caption && (
         <p className="text-[10px] print:text-[8pt] font-medium text-slate-700 text-center max-w-full truncate px-1">{caption}</p>
+      )}
+      {metaLines.length > 0 && (
+        <div className="text-[9px] print:text-[7pt] text-slate-600 text-center leading-tight px-1 space-y-0.5">
+          {metaLines.map(line => (
+            <p key={line} className="break-all">
+              {line}
+            </p>
+          ))}
+        </div>
       )}
       {showEncodingLine && (
         <p className="text-[10px] print:text-[8pt] text-slate-500 break-all text-center px-1 max-w-full">{payload}</p>
@@ -162,6 +173,8 @@ export function BarcodePanel() {
           item,
           unitIndex: row.index,
           payload: row.payload!,
+          barcode: row.barcode,
+          serial: row.serial,
         }))
       ),
     [selectedList, sep]
@@ -492,12 +505,17 @@ export function BarcodePanel() {
                   품목을 선택하세요. (바코드 값 또는 SH·시리얼이 있는 품목만 인쇄됩니다)
                 </span>
               ) : (
-                validItemRows.map(({ item, payload, unitIndex }) => (
+                validItemRows.map(({ item, payload, unitIndex, serial, barcode }) => (
                   <BarcodeStrip
                     key={`${item.id}-${unitIndex}`}
                     payload={payload}
                     format={format}
                     caption={`${item.name} #${unitIndex}`}
+                    metaLines={[
+                      item.sh ? `SH: ${item.quantity > 1 ? `${item.sh}-${String(unitIndex).padStart(3, '0')}` : item.sh}` : '',
+                      serial ? `Serial: ${serial}` : '',
+                      barcode ? `Barcode: ${barcode}` : '',
+                    ].filter(Boolean)}
                     paperWidthMm={paperPreset.widthMm}
                     paperHeightMm={paperPreset.heightMm}
                   />
