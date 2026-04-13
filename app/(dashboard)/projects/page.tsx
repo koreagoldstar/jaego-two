@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { deleteProjectPlanAction, saveProjectPlanAction } from '@/app/(dashboard)/projects/actions'
 import type { Item } from '@/lib/supabase/types'
+import { ProjectPlanMultiForm } from '@/components/projects/ProjectPlanMultiForm'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,44 +108,9 @@ export default async function ProjectsPage() {
         <p className="text-sm text-slate-500">품목별 예정수량·현재재고·출고완료·잔여 예정수량을 한눈에 확인합니다.</p>
       </div>
 
-      <form action={saveProjectPlanAction} className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
-        <p className="text-sm font-semibold text-slate-900">사용예정 재고 입력/수정</p>
-        <div className="grid gap-3 md:grid-cols-4">
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">프로젝트명</label>
-            <input name="project_name" required className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">설치 일정</label>
-            <input name="install_date" type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">품목</label>
-            <select name="item_id" required className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm bg-white">
-              <option value="">선택…</option>
-              {items.map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.name} (현재 {item.quantity})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">사용예정 수량</label>
-            <input
-              name="planned_qty"
-              type="number"
-              min={0}
-              required
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-            />
-          </div>
-        </div>
-        <p className="text-xs text-slate-500">0을 입력하면 해당 프로젝트-품목 예정치가 삭제됩니다.</p>
-        <button type="submit" className="rounded-xl bg-blue-600 text-white px-4 py-2.5 text-sm font-medium">
-          저장
-        </button>
-      </form>
+      <ProjectPlanMultiForm
+        items={items.map(item => ({ id: item.id, name: item.name, quantity: item.quantity ?? 0 }))}
+      />
 
       {projectNames.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 bg-white">
