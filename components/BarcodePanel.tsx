@@ -7,6 +7,21 @@ import type { Item } from '@/lib/supabase/types'
 import { buildItemLabelVariants } from '@/lib/items/labelVariants'
 import { Loader2, Package, PencilLine, Printer } from 'lucide-react'
 
+type LabelPreset = {
+  key: string
+  label: string
+  widthMm: number
+  heightMm: number
+}
+
+const LABEL_PRESETS: LabelPreset[] = [
+  { key: '40x30', label: '40 x 30mm', widthMm: 40, heightMm: 30 },
+  { key: '50x30', label: '50 x 30mm', widthMm: 50, heightMm: 30 },
+  { key: '58x40', label: '58 x 40mm', widthMm: 58, heightMm: 40 },
+  { key: '70x50', label: '70 x 50mm', widthMm: 70, heightMm: 50 },
+  { key: '100x50', label: '100 x 50mm', widthMm: 100, heightMm: 50 },
+]
+
 function getItemLabelRows(item: Item, sep: string) {
   return buildItemLabelVariants(item, sep).filter(row => row.payload)
 }
@@ -20,13 +35,18 @@ function BarcodeStrip({
   format,
   caption,
   showEncodingLine = true,
+  paperWidthMm,
+  paperHeightMm,
 }: {
   payload: string
   format: 'CODE128' | 'CODE39'
   caption?: string
   showEncodingLine?: boolean
+  paperWidthMm: number
+  paperHeightMm: number
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  const barcodeHeight = Math.max(38, Math.floor(paperHeightMm * 2.1))
 
   useEffect(() => {
     const canvas = ref.current
@@ -37,24 +57,32 @@ function BarcodeStrip({
       JsBarcode(canvas, payload, {
         format,
         width: 2,
-        height: 100,
+        height: barcodeHeight,
         displayValue: true,
-        margin: 10,
+        margin: 4,
+        fontSize: 10,
       })
     } catch {
       /* invalid */
     }
-  }, [payload, format])
+  }, [payload, format, barcodeHeight])
 
   return (
-    <div className="flex flex-col items-center gap-1 py-3 border-b border-slate-100 last:border-0 print:break-inside-avoid">
+    <div
+      className="barcode-print-label flex flex-col items-center justify-center gap-1 border-b border-slate-100 last:border-0 print:break-inside-avoid"
+      style={{
+        width: `${paperWidthMm}mm`,
+        minHeight: `${paperHeightMm}mm`,
+        padding: '2mm 1.5mm',
+      }}
+    >
       {caption && (
-        <p className="text-xs font-medium text-slate-700 text-center max-w-full truncate px-2">{caption}</p>
+        <p className="text-[10px] print:text-[8pt] font-medium text-slate-700 text-center max-w-full truncate px-1">{caption}</p>
       )}
       {showEncodingLine && (
-        <p className="text-[11px] text-slate-500 break-all text-center px-2 max-w-full">{payload}</p>
+        <p className="text-[10px] print:text-[8pt] text-slate-500 break-all text-center px-1 max-w-full">{payload}</p>
       )}
-      <canvas ref={ref} className="max-w-full" />
+      <canvas ref={ref} className="max-w-full h-auto" style={{ width: `${Math.round(paperWidthMm * 0.68)}mm` }} />
     </div>
   )
 }
@@ -65,6 +93,7 @@ export function BarcodePanel() {
   const [serial, setSerial] = useState('')
   const [sep, setSep] = useState('|')
   const [format, setFormat] = useState<'CODE128' | 'CODE39'>('CODE128')
+  const [paperKey, setPaperKey] = useState<string>('58x40')
 
   const [items, setItems] = useState<Item[]>([])
   const [itemsLoading, setItemsLoading] = useState(true)
@@ -213,6 +242,7 @@ export function BarcodePanel() {
   const canPrint =
     mode === 'manual' ? !!manualPayload : validItemRows.length > 0
   const canDownload = canPrint
+  const paperPreset = LABEL_PRESETS.find(p => p.key === paperKey) ?? LABEL_PRESETS[2]
 
   return (
     <div className="space-y-4 rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
@@ -220,24 +250,38 @@ export function BarcodePanel() {
         dangerouslySetInnerHTML={{
           __html: `
 @media print {
-  @page { margin: 10mm; size: auto; }
+  @page { margin: 0; size: ${paperPreset.widthMm}mm ${paperPreset.heightMm}mm; }
   body * { visibility: hidden !important; }
   #barcode-print-area, #barcode-print-area * { visibility: visible !important; }
   #barcode-print-area {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: 100% !important;
+    width: ${paperPreset.widthMm}mm !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: flex-start !important;
-    padding: 8mm !important;
+    padding: 0 !important;
     background: white !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  #barcode-print-area canvas { max-width: 100% !important; height: auto !important; }
+  #barcode-print-area .barcode-print-label {
+    width: ${paperPreset.widthMm}mm !important;
+    min-height: ${paperPreset.heightMm}mm !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    border: 0 !important;
+  }
+  #barcode-print-area .barcode-print-label:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+  #barcode-print-area canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
 }
 `,
         }}
@@ -285,6 +329,20 @@ export function BarcodePanel() {
           >
             <option value="CODE128">CODE128 (권장)</option>
             <option value="CODE39">CODE39</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-slate-600 mb-1">Xprinter 용지</label>
+          <select
+            value={paperKey}
+            onChange={e => setPaperKey(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+          >
+            {LABEL_PRESETS.map(p => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
           </select>
         </div>
       </div>
@@ -397,10 +455,7 @@ export function BarcodePanel() {
         </>
       )}
 
-      <div
-        id="barcode-print-area"
-        className="rounded-xl bg-slate-50 border border-slate-200 p-4 overflow-x-auto print:border-0 print:bg-white"
-      >
+      <div id="barcode-print-area" className="rounded-xl bg-slate-50 border border-slate-200 p-4 overflow-x-auto print:border-0 print:bg-white">
         {mode === 'manual' ? (
           <>
             <p className="text-xs text-slate-500 mb-2 break-all print:text-slate-800 print:text-sm">
@@ -409,7 +464,13 @@ export function BarcodePanel() {
             </p>
             <div className="flex justify-center min-h-[120px] items-center">
               {manualPayload ? (
-                <BarcodeStrip payload={manualPayload} format={format} showEncodingLine={false} />
+                <BarcodeStrip
+                  payload={manualPayload}
+                  format={format}
+                  showEncodingLine={false}
+                  paperWidthMm={paperPreset.widthMm}
+                  paperHeightMm={paperPreset.heightMm}
+                />
               ) : (
                 <span className="text-slate-400 text-sm">값을 입력하면 미리보기가 나옵니다.</span>
               )}
@@ -432,6 +493,8 @@ export function BarcodePanel() {
                     payload={payload}
                     format={format}
                     caption={`${item.name} #${unitIndex}`}
+                    paperWidthMm={paperPreset.widthMm}
+                    paperHeightMm={paperPreset.heightMm}
                   />
                 ))
               )}
