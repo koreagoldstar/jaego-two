@@ -18,6 +18,15 @@ export default function MovePage() {
           </a>
           <span className="text-slate-500"> — 필드용으로 메뉴 없이 바로 처리</span>
         </p>
+        <p className="text-sm mt-1">
+          <a
+            href="/move-bulk"
+            className="text-orange-600 font-medium underline underline-offset-2 hover:text-orange-700"
+          >
+            다중 스캔 일괄 출고
+          </a>
+          <span className="text-slate-500"> — 여러 바코드를 같은 프로젝트로 한 번에 출고</span>
+        </p>
       </div>
       <Suspense fallback={<div className="text-center text-slate-500 py-8">로딩…</div>}>
         <MoveStockClient />
