@@ -15,11 +15,11 @@ type LabelPreset = {
 }
 
 const LABEL_PRESETS: LabelPreset[] = [
-  { key: '40x20', label: '40 x 20mm (기본)', widthMm: 40, heightMm: 20 },
+  { key: '40x20', label: '40 x 20mm', widthMm: 40, heightMm: 20 },
   { key: '40x30', label: '40 x 30mm', widthMm: 40, heightMm: 30 },
   { key: '50x30', label: '50 x 30mm', widthMm: 50, heightMm: 30 },
   { key: '50.8x101.6', label: '2 x 4in (50.8 x 101.6mm)', widthMm: 50.8, heightMm: 101.6 },
-  { key: '58x40', label: '58 x 40mm', widthMm: 58, heightMm: 40 },
+  { key: '58x40', label: '58 x 40mm (기본)', widthMm: 58, heightMm: 40 },
   { key: '70x50', label: '70 x 50mm', widthMm: 70, heightMm: 50 },
   { key: '100x60', label: '100 x 60mm (USER)', widthMm: 100, heightMm: 60 },
   { key: '101.6x101.6', label: '4 x 4in (101.6 x 101.6mm)', widthMm: 101.6, heightMm: 101.6 },
@@ -120,7 +120,7 @@ export function BarcodePanel() {
   const [serial, setSerial] = useState('')
   const [sep, setSep] = useState('|')
   const [format, setFormat] = useState<'CODE128' | 'CODE39'>('CODE128')
-  const [paperKey, setPaperKey] = useState<string>('40x20')
+  const [paperKey, setPaperKey] = useState<string>('58x40')
 
   const [items, setItems] = useState<Item[]>([])
   const [itemsLoading, setItemsLoading] = useState(true)
@@ -376,6 +376,7 @@ export function BarcodePanel() {
             ))}
           </select>
         </div>
+        <p className="text-xs text-slate-500">미리보기는 크게, 실제 인쇄는 선택 용지 크기에 맞춰 출력됩니다.</p>
       </div>
 
       {mode === 'items' ? (
@@ -489,10 +490,6 @@ export function BarcodePanel() {
       <div id="barcode-print-area" className="rounded-xl bg-slate-50 border border-slate-200 p-4 overflow-x-auto print:border-0 print:bg-white">
         {mode === 'manual' ? (
           <>
-            <p className="text-xs text-slate-500 mb-2 break-all print:text-slate-800 print:text-sm">
-              인코딩 값:{' '}
-              <strong className="text-slate-800">{manualPayload || '(비어 있음)'}</strong>
-            </p>
             <div className="flex justify-center min-h-[120px] items-center">
               {manualPayload ? (
                 <BarcodeStrip
@@ -559,7 +556,7 @@ export function BarcodePanel() {
         </button>
       </div>
       <p className="text-xs text-slate-500 text-center">
-        인쇄 시 인쇄 창에서 라벨 프린터·복합기를 선택하면 됩니다. 여러 품목이면 한 용지에 순서대로 나옵니다.
+        인쇄 시 선택한 용지 기준으로 1라벨씩 출력됩니다.
       </p>
     </div>
   )
