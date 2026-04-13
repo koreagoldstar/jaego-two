@@ -41,7 +41,6 @@ function BarcodeStrip({
   caption,
   metaLines = [],
   showEncodingLine = true,
-  paperWidthMm,
   paperHeightMm,
 }: {
   payload: string
@@ -49,11 +48,15 @@ function BarcodeStrip({
   caption?: string
   metaLines?: string[]
   showEncodingLine?: boolean
-  paperWidthMm: number
   paperHeightMm: number
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
-  const barcodeHeight = Math.max(38, Math.floor(paperHeightMm * 2.1))
+  const compactLabel = paperHeightMm <= 24
+  const barcodeHeight = compactLabel ? 34 : Math.max(46, Math.floor(paperHeightMm * 2.4))
+  const normalizedMeta =
+    compactLabel && metaLines.length > 0
+      ? [metaLines.join(' / ')]
+      : metaLines
 
   useEffect(() => {
     const canvas = ref.current
@@ -66,29 +69,30 @@ function BarcodeStrip({
         width: 2,
         height: barcodeHeight,
         displayValue: true,
-        margin: 4,
-        fontSize: 10,
+        margin: compactLabel ? 1 : 3,
+        fontSize: compactLabel ? 8 : 10,
       })
     } catch {
       /* invalid */
     }
-  }, [payload, format, barcodeHeight])
+  }, [payload, format, barcodeHeight, compactLabel])
 
   return (
     <div
       className="barcode-print-label flex flex-col items-center justify-center gap-1 border-b border-slate-100 last:border-0 print:break-inside-avoid"
       style={{
-        width: `${paperWidthMm}mm`,
-        minHeight: `${paperHeightMm}mm`,
-        padding: '2mm 1.5mm',
+        // Screen preview stays large/readable; print CSS enforces actual label size.
+        width: '100%',
+        minHeight: '180px',
+        padding: '10px',
       }}
     >
       {caption && (
-        <p className="text-[10px] print:text-[8pt] font-medium text-slate-700 text-center max-w-full truncate px-1">{caption}</p>
+        <p className="text-xs print:text-[7pt] font-medium text-slate-700 text-center max-w-full truncate px-1">{caption}</p>
       )}
-      {metaLines.length > 0 && (
-        <div className="text-[9px] print:text-[7pt] text-slate-600 text-center leading-tight px-1 space-y-0.5">
-          {metaLines.map(line => (
+      {normalizedMeta.length > 0 && (
+        <div className="text-[11px] print:text-[6.5pt] text-slate-600 text-center leading-tight px-1 space-y-0.5">
+          {normalizedMeta.map(line => (
             <p key={line} className="break-all">
               {line}
             </p>
@@ -96,9 +100,16 @@ function BarcodeStrip({
         </div>
       )}
       {showEncodingLine && (
-        <p className="text-[10px] print:text-[8pt] text-slate-500 break-all text-center px-1 max-w-full">{payload}</p>
+        <p className="text-[11px] print:text-[6.5pt] text-slate-500 break-all text-center px-1 max-w-full">{payload}</p>
       )}
-      <canvas ref={ref} className="max-w-full h-auto" style={{ width: `${Math.round(paperWidthMm * 0.9)}mm` }} />
+      <canvas
+        ref={ref}
+        className="max-w-full h-auto"
+        style={{
+          width: 'min(96%, 560px)',
+          maxHeight: compactLabel ? '84px' : '130px',
+        }}
+      />
     </div>
   )
 }
@@ -288,6 +299,8 @@ export function BarcodePanel() {
   #barcode-print-area .barcode-print-label {
     width: ${paperPreset.widthMm}mm !important;
     min-height: ${paperPreset.heightMm}mm !important;
+    padding: 1mm !important;
+    gap: 0.5mm !important;
     page-break-after: always !important;
     break-after: page !important;
     border: 0 !important;
@@ -297,7 +310,7 @@ export function BarcodePanel() {
     break-after: auto !important;
   }
   #barcode-print-area canvas {
-    max-width: 100% !important;
+    width: 96% !important;
     height: auto !important;
   }
 }
@@ -486,7 +499,6 @@ export function BarcodePanel() {
                   payload={manualPayload}
                   format={format}
                   showEncodingLine={false}
-                  paperWidthMm={paperPreset.widthMm}
                   paperHeightMm={paperPreset.heightMm}
                 />
               ) : (
@@ -516,7 +528,6 @@ export function BarcodePanel() {
                       serial ? `Serial: ${serial}` : '',
                       barcode ? `Barcode: ${barcode}` : '',
                     ].filter(Boolean)}
-                    paperWidthMm={paperPreset.widthMm}
                     paperHeightMm={paperPreset.heightMm}
                   />
                 ))
