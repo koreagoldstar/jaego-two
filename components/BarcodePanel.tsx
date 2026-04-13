@@ -298,20 +298,31 @@ export function BarcodePanel() {
   }
   #barcode-print-area .barcode-print-label {
     width: ${paperPreset.widthMm}mm !important;
+    height: ${paperPreset.heightMm}mm !important;
     min-height: ${paperPreset.heightMm}mm !important;
     padding: 1mm !important;
     gap: 0.5mm !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
     page-break-after: always !important;
     break-after: page !important;
     border: 0 !important;
+  }
+  #barcode-print-area > p {
+    display: none !important;
   }
   #barcode-print-area .barcode-print-label:last-child {
     page-break-after: auto !important;
     break-after: auto !important;
   }
+  #barcode-print-area .barcode-print-label p {
+    margin: 0 !important;
+    line-height: 1.1 !important;
+  }
   #barcode-print-area canvas {
     width: 96% !important;
     height: auto !important;
+    max-height: ${Math.max(12, paperPreset.heightMm - 14)}mm !important;
   }
 }
 `,
