@@ -31,13 +31,13 @@ Supabase SQL: `supabase/migrations/001_initial.sql` 실행 (자세한 절차는 
 이 폴더는 이미 `git` 이 초기화되어 있습니다. (처음이 아니면 `git init` 은 하지 마세요.)
 
 1. 브라우저에서 [GitHub → New repository](https://github.com/new) 열기  
-2. Repository name: **`jaego`** (원하면 다른 이름)  
+2. Repository name: **`jeago-two`** (또는 원하는 이름)  
 3. **Add a README** 는 **체크하지 않음** (빈 저장소) → **Create repository**  
 4. PC에서 (PowerShell에서 `npm` 이 막히면 `git` 만 쓰거나 **CMD** 사용):
 
    ```powershell
-   cd c:\Users\COM\jaego
-   git remote add origin https://github.com/<GitHub아이디>/jaego.git
+   cd c:\Users\COM\jaego-two
+   git remote add origin https://github.com/<GitHub아이디>/jeago-two.git
    git push -u origin main
    ```
 
@@ -47,7 +47,7 @@ Supabase SQL: `supabase/migrations/001_initial.sql` 실행 (자세한 절차는 
 ## Vercel로 배포
 
 1. [vercel.com](https://vercel.com) 에 GitHub으로 로그인  
-2. **Add New… → Project** → 방금 만든 **`jaego`** 저장소 **Import**  
+2. **Add New… → Project** → 방금 만든 **`jeago-two`** 저장소 **Import**  
 3. Framework: **Next.js** (자동), **Root Directory** 는 그대로 두고 **Deploy** 전에 아래로 이동  
 4. **Environment Variables** 에 로컬 `.env.local` 과 **동일한** 이름으로 넣기:
    - `NEXT_PUBLIC_SUPABASE_URL`
@@ -60,9 +60,10 @@ Supabase SQL: `supabase/migrations/001_initial.sql` 실행 (자세한 절차는 
    - **Redirect URLs** 에 `https://본인-프로젝트.vercel.app/**` 추가 후 저장  
 8. 환경 변수를 나중에 바꿨다면 Vercel에서 **Redeploy** (빌드 시 `NEXT_PUBLIC_*` 가 클라이언트에 들어감)
 
-## Vercel에서 `middleware` / `public-env` 빌드 오류가 날 때
+## Vercel에서 `middleware` / `public-env` 관련 빌드 오류가 날 때
 
-이 저장소 **`main` 최신본에는 루트 `middleware.ts` 파일이 없습니다.** 그런데도 같은 오류가 나오면 **Vercel이 이 GitHub 저장소를 빌드하지 않은 것**입니다.
+이 저장소 **`main` 최신본은 루트 `middleware.ts`가 `@/lib/...`를 참조하지 않는 통과용 구현**입니다.  
+그런데도 예전 `public-env` 관련 오류가 나오면 **Vercel이 현재 GitHub 커밋이 아닌 이전 캐시/다른 저장소를 빌드**한 경우가 많습니다.
 
 1. Vercel → 해당 프로젝트 → **Settings → Git**  
    - **Connected Git Repository** 가 **`koreagoldstar/jaego-two`** 인지 확인 (다른 저장소·포크면 안 됨)  
@@ -70,6 +71,23 @@ Supabase SQL: `supabase/migrations/001_initial.sql` 실행 (자세한 절차는 
    - **Root Directory** 는 **비움** (한 글자도 넣지 않음)
 2. **Deployments** 에서 맨 위 배포의 **커밋 SHA** 를 눌러 GitHub 커밋과 같은지 확인  
 3. **Redeploy** 시 **Use existing Build Cache** 를 끄고(가능하면 “Clear cache and redeploy”) 다시 빌드
+
+## PowerShell에서 `.env.local` 편집할 때
+
+`.env.local` 안의 아래 줄은 **터미널에 직접 입력하는 명령이 아닙니다.** 파일에 텍스트로 저장해야 합니다.
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+PowerShell에서 파일 복사 후 메모장으로 열어 편집하면 안전합니다.
+
+```powershell
+copy .env.local.example .env.local
+notepad .env.local
+npm run setup:check
+```
 
 ## 라이선스
 

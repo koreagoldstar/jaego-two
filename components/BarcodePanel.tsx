@@ -15,10 +15,15 @@ type LabelPreset = {
 }
 
 const LABEL_PRESETS: LabelPreset[] = [
+  { key: '40x20', label: '40 x 20mm (기본)', widthMm: 40, heightMm: 20 },
   { key: '40x30', label: '40 x 30mm', widthMm: 40, heightMm: 30 },
   { key: '50x30', label: '50 x 30mm', widthMm: 50, heightMm: 30 },
+  { key: '50.8x101.6', label: '2 x 4in (50.8 x 101.6mm)', widthMm: 50.8, heightMm: 101.6 },
   { key: '58x40', label: '58 x 40mm', widthMm: 58, heightMm: 40 },
   { key: '70x50', label: '70 x 50mm', widthMm: 70, heightMm: 50 },
+  { key: '100x60', label: '100 x 60mm (USER)', widthMm: 100, heightMm: 60 },
+  { key: '101.6x101.6', label: '4 x 4in (101.6 x 101.6mm)', widthMm: 101.6, heightMm: 101.6 },
+  { key: '101.6x152.4', label: '4 x 6in (101.6 x 152.4mm)', widthMm: 101.6, heightMm: 152.4 },
   { key: '100x50', label: '100 x 50mm', widthMm: 100, heightMm: 50 },
 ]
 
@@ -82,7 +87,7 @@ function BarcodeStrip({
       {showEncodingLine && (
         <p className="text-[10px] print:text-[8pt] text-slate-500 break-all text-center px-1 max-w-full">{payload}</p>
       )}
-      <canvas ref={ref} className="max-w-full h-auto" style={{ width: `${Math.round(paperWidthMm * 0.68)}mm` }} />
+      <canvas ref={ref} className="max-w-full h-auto" style={{ width: `${Math.round(paperWidthMm * 0.9)}mm` }} />
     </div>
   )
 }
@@ -93,7 +98,7 @@ export function BarcodePanel() {
   const [serial, setSerial] = useState('')
   const [sep, setSep] = useState('|')
   const [format, setFormat] = useState<'CODE128' | 'CODE39'>('CODE128')
-  const [paperKey, setPaperKey] = useState<string>('58x40')
+  const [paperKey, setPaperKey] = useState<string>('40x20')
 
   const [items, setItems] = useState<Item[]>([])
   const [itemsLoading, setItemsLoading] = useState(true)
@@ -242,7 +247,7 @@ export function BarcodePanel() {
   const canPrint =
     mode === 'manual' ? !!manualPayload : validItemRows.length > 0
   const canDownload = canPrint
-  const paperPreset = LABEL_PRESETS.find(p => p.key === paperKey) ?? LABEL_PRESETS[2]
+  const paperPreset = LABEL_PRESETS.find(p => p.key === paperKey) ?? LABEL_PRESETS[0]
 
   return (
     <div className="space-y-4 rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
