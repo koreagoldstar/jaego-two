@@ -80,18 +80,19 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number, barcodeMaxMm:
         margin: 0;
         padding: 0;
         width: ${widthMm}mm;
-        height: ${heightMm}mm;
-        overflow: hidden;
+        height: auto;
+        min-height: ${heightMm}mm;
+        overflow: visible;
       }
       body {
         margin: 0 !important;
         padding: 0 !important;
         width: ${widthMm}mm;
-        height: ${heightMm}mm;
+        height: auto !important;
         min-height: ${heightMm}mm;
-        max-height: ${heightMm}mm;
+        max-height: none !important;
         background: #fff;
-        overflow: hidden;
+        overflow: visible;
       }
       .label {
         width: ${widthMm}mm;
@@ -152,8 +153,10 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number, barcodeMaxMm:
         }
         html, body {
           width: ${widthMm}mm !important;
-          height: ${heightMm}mm !important;
-          overflow: hidden !important;
+          height: auto !important;
+          min-height: 0 !important;
+          max-height: none !important;
+          overflow: visible !important;
         }
       }
   `
