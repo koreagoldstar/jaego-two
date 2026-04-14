@@ -33,8 +33,8 @@ export function ScanClient() {
     <div className="space-y-2">
       <BarcodeCamera
         onDecode={onDecode}
-        initialStatus="촬영 또는 사진을 선택하면 코드를 읽습니다."
-        videoClassName="w-full max-h-[50vh] min-h-[220px] flex flex-col items-center justify-center bg-slate-950 text-slate-300 py-6"
+        initialStatus="실시간 스캔이 시작됩니다…"
+        videoClassName="w-full max-h-[50vh] min-h-[220px] object-contain bg-black"
       />
       {hint && <p className="text-sm text-red-600 px-1">{hint}</p>}
     </div>
