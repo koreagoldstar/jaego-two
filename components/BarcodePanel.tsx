@@ -6,7 +6,11 @@ import QRCode from 'qrcode'
 import { createClient } from '@/lib/supabase/client'
 import type { Item } from '@/lib/supabase/types'
 import { buildItemLabelVariants } from '@/lib/items/labelVariants'
-import { normalizeBarcodePayload } from '@/lib/items/barcodePayload'
+import {
+  is1DBarcodePayloadLossy,
+  normalizeBarcodePayload,
+  to1DBarcodeSafeString,
+} from '@/lib/items/barcodePayload'
 import { Loader2, Package, PencilLine, Printer } from 'lucide-react'
 
 type LabelPreset = {
@@ -225,26 +229,31 @@ function BarcodeStrip({
       return
     }
 
+    const line = to1DBarcodeSafeString(p)
+    if (!line) return
+
+    const quiet = Math.max(8, compactLabel ? 6 : 12)
+
     try {
       const ctx = canvas.getContext('2d')
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
       try {
-        JsBarcode(canvas, p, {
+        JsBarcode(canvas, line, {
           format,
           width: 2,
           height: barcodeHeight,
           displayValue: false,
-          margin: compactLabel ? 1 : 3,
+          margin: quiet,
           fontSize: compactLabel ? 8 : 10,
         })
       } catch {
         if (format === 'CODE39') {
-          JsBarcode(canvas, p, {
+          JsBarcode(canvas, line, {
             format: 'CODE128',
             width: 2,
             height: barcodeHeight,
             displayValue: false,
-            margin: compactLabel ? 1 : 3,
+            margin: quiet,
             fontSize: compactLabel ? 8 : 10,
           })
         }
@@ -276,7 +285,18 @@ function BarcodeStrip({
         </div>
       )}
       {showEncodingLine && (
-        <p className="text-[11px] print:text-[6.5pt] text-slate-500 break-all text-center px-1 max-w-full">{payload}</p>
+        <div className="text-[11px] print:text-[6.5pt] text-slate-500 text-center px-1 max-w-full space-y-0.5">
+          <p className="break-all">
+            {format === 'QR'
+              ? payload
+              : (() => {
+                  const safe = to1DBarcodeSafeString(payload)
+                  return is1DBarcodePayloadLossy(payload, safe)
+                    ? `${safe} · (한글 등은 1D에 미포함 — QR 권장)`
+                    : safe
+                })()}
+          </p>
+        </div>
       )}
       <canvas
         ref={ref}
@@ -423,25 +443,28 @@ export function BarcodePanel() {
         })()
       }
 
+      const line = to1DBarcodeSafeString(p)
+      if (!line) return Promise.resolve(null)
+
       return new Promise(resolve => {
         const canvas = document.createElement('canvas')
         try {
           try {
-            JsBarcode(canvas, p, {
+            JsBarcode(canvas, line, {
               format,
               width: 2,
               height: 100,
               displayValue: true,
-              margin: 10,
+              margin: 14,
             })
           } catch {
             if (format === 'CODE39') {
-              JsBarcode(canvas, p, {
+              JsBarcode(canvas, line, {
                 format: 'CODE128',
                 width: 2,
                 height: 100,
                 displayValue: true,
-                margin: 10,
+                margin: 14,
               })
             } else {
               resolve(null)
@@ -484,18 +507,21 @@ export function BarcodePanel() {
         }
       }
 
+      const line = to1DBarcodeSafeString(clean)
+      if (!line) return null
+
       const barHeight = Math.min(220, Math.max(40, Math.floor(maxHPx * 0.88)))
-      const quietPx = Math.max(16, Math.round(maxWPx * 0.07))
+      const quietPx = Math.max(24, Math.round(maxWPx * 0.1))
 
       const probe = document.createElement('canvas')
       let bestModule = 2
       let bestFit = -1
 
-      for (const moduleW of [3, 2, 1] as const) {
+      const tryProbe = (moduleW: 3 | 2 | 1) => {
         try {
           const ctx = probe.getContext('2d')
           if (ctx) ctx.clearRect(0, 0, probe.width, probe.height)
-          JsBarcode(probe, clean, {
+          JsBarcode(probe, line, {
             format,
             width: moduleW,
             height: barHeight,
@@ -512,9 +538,13 @@ export function BarcodePanel() {
         }
       }
 
+      for (const moduleW of [3, 2] as const) tryProbe(moduleW)
+      if (bestFit < 0) tryProbe(1)
+      if (bestFit < 0) return null
+
       const canvas = document.createElement('canvas')
       const draw = (fmt: 'CODE128' | 'CODE39') =>
-        JsBarcode(canvas, clean, {
+        JsBarcode(canvas, line, {
           format: fmt,
           width: bestModule,
           height: barHeight,

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { normalizeBarcodePayload } from '@/lib/items/barcodePayload'
+import { normalizeBarcodePayload, to1DBarcodeSafeString } from '@/lib/items/barcodePayload'
 
 /** 사용자 품목 중 스캔 문자열로 id 조회 (인쇄 라벨 payload와 동일 규칙에 맞춤) */
 export async function findItemIdByBarcode(
@@ -15,6 +15,12 @@ export async function findItemIdByBarcode(
 
   const { data: byBarcode } = await base().eq('barcode_code', code).maybeSingle()
   if (byBarcode?.id) return byBarcode.id
+
+  const safeCode = to1DBarcodeSafeString(code)
+  if (safeCode && safeCode !== code) {
+    const { data: bySafe } = await base().eq('barcode_code', safeCode).maybeSingle()
+    if (bySafe?.id) return bySafe.id
+  }
 
   const { data: bySerial } = await base().eq('serial_number', code).maybeSingle()
   if (bySerial?.id) return bySerial.id
