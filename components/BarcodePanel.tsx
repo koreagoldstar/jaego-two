@@ -109,42 +109,140 @@ function buildBarcodePrintDocumentHtml(htmlLabels: string, paperPreset: LabelPre
 </html>`
 }
 
-function printHtmlInNewWindow(docHtml: string) {
-  const w = window.open('', '_blank', 'noopener,noreferrer')
-  if (!w) {
-    window.alert(
-      'XPrinter DT427B 인쇄는 새 창이 필요합니다. 브라우저에서 이 사이트의 팝업을 허용한 뒤 다시「바로 인쇄」를 눌러 주세요.'
-    )
-    return
+/** 새 창 인쇄 — noopener 제거(일부 Chrome에서 print·참조 이상), 인쇄 완료 후에만 닫기 */
+function printHtmlInNewWindow(docHtml: string): boolean {
+  const w = window.open('about:blank', '_blank')
+  if (!w) return false
+  try {
+    w.document.open()
+    w.document.write(docHtml)
+    w.document.close()
+  } catch (e) {
+    console.error('[print] new window write failed', e)
+    try {
+      w.close()
+    } catch {
+      /* ignore */
+    }
+    return false
   }
-  w.document.open()
-  w.document.write(docHtml)
-  w.document.close()
 
-  const finalize = () => {
+  const schedulePrint = () => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         try {
           w.focus()
           w.print()
-        } finally {
-          setTimeout(() => w.close(), 800)
+        } catch (e) {
+          console.error('[print] window.print failed', e)
         }
       })
     })
   }
 
   const imgs = Array.from(w.document.images)
+  const cleanup = () => {
+    try {
+      if (!w.closed) w.close()
+    } catch {
+      /* ignore */
+    }
+  }
+  w.addEventListener(
+    'afterprint',
+    () => {
+      setTimeout(cleanup, 400)
+    },
+    { once: true }
+  )
+  setTimeout(cleanup, 120000)
+
   if (imgs.length === 0) {
-    setTimeout(finalize, 150)
-    return
+    setTimeout(schedulePrint, 150)
+    return true
   }
   let pending = imgs.length
   const onDone = () => {
     pending -= 1
-    if (pending <= 0) setTimeout(finalize, 120)
+    if (pending <= 0) setTimeout(schedulePrint, 120)
   }
   imgs.forEach(img => {
+    if (img.complete) onDone()
+    else {
+      img.addEventListener('load', onDone, { once: true })
+      img.addEventListener('error', onDone, { once: true })
+    }
+  })
+  return true
+}
+
+function printHtmlInHiddenIframe(docHtml: string, paperPreset: LabelPreset, labelCount: number) {
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('aria-hidden', 'true')
+  Object.assign(iframe.style, {
+    position: 'fixed',
+    left: '-10000px',
+    top: '0',
+    width: `${Math.max(320, Math.ceil(paperPreset.widthMm * 4))}px`,
+    height: `${Math.max(400, Math.ceil(paperPreset.heightMm * 4 * Math.max(1, labelCount)))}px`,
+    border: '0',
+    opacity: '0',
+    pointerEvents: 'none',
+    zIndex: '-1',
+  })
+  document.body.appendChild(iframe)
+
+  const frameDoc = iframe.contentDocument
+  const frameWin = iframe.contentWindow
+  if (!frameDoc || !frameWin) {
+    iframe.remove()
+    return
+  }
+
+  frameDoc.open()
+  frameDoc.write(docHtml)
+  frameDoc.close()
+
+  const finalizePrint = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          frameWin.focus()
+          frameWin.print()
+        } catch (e) {
+          console.error('[print] iframe.print failed', e)
+        }
+      })
+    })
+  }
+
+  const removeIframe = () => {
+    try {
+      iframe.remove()
+    } catch {
+      /* ignore */
+    }
+  }
+  frameWin.addEventListener(
+    'afterprint',
+    () => {
+      setTimeout(removeIframe, 400)
+    },
+    { once: true }
+  )
+  setTimeout(removeIframe, 120000)
+
+  const images = Array.from(frameDoc.images)
+  if (images.length === 0) {
+    setTimeout(finalizePrint, 100)
+    return
+  }
+  let pending = images.length
+  const onDone = () => {
+    pending -= 1
+    if (pending <= 0) setTimeout(finalizePrint, 100)
+  }
+  images.forEach(img => {
     if (img.complete) onDone()
     else {
       img.addEventListener('load', onDone, { once: true })
@@ -451,66 +549,14 @@ export function BarcodePanel() {
     const docHtml = buildBarcodePrintDocumentHtml(htmlLabels, paperPreset, useThermalWindow)
 
     if (useThermalWindow) {
-      printHtmlInNewWindow(docHtml)
-      return
-    }
-
-    const iframe = document.createElement('iframe')
-    // 0×0 iframe은 Chromium에서 인쇄 미리보기가 비거나 print()가 동작하지 않는 경우가 많음.
-    // 레이아웃·인쇄 엔진이 문서 크기를 알 수 있도록 화면 밖에 실제 픽셀 크기를 둔다.
-    iframe.setAttribute('aria-hidden', 'true')
-    Object.assign(iframe.style, {
-      position: 'fixed',
-      left: '-10000px',
-      top: '0',
-      width: `${Math.max(320, Math.ceil(paperPreset.widthMm * 4))}px`,
-      height: `${Math.max(400, Math.ceil(paperPreset.heightMm * 4 * Math.max(1, labels.length)))}px`,
-      border: '0',
-      opacity: '0',
-      pointerEvents: 'none',
-      zIndex: '-1',
-    })
-    document.body.appendChild(iframe)
-
-    const frameDoc = iframe.contentDocument
-    const frameWin = iframe.contentWindow
-    if (!frameDoc || !frameWin) {
-      iframe.remove()
-      return
-    }
-
-    frameDoc.open()
-    frameDoc.write(docHtml)
-    frameDoc.close()
-
-    const finalize = () => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          frameWin.focus()
-          frameWin.print()
-          setTimeout(() => iframe.remove(), 1500)
-        })
-      })
-    }
-
-    const images = Array.from(frameDoc.images)
-    if (images.length === 0) {
-      setTimeout(finalize, 100)
-      return
-    }
-
-    let pending = images.length
-    const onDone = () => {
-      pending -= 1
-      if (pending <= 0) setTimeout(finalize, 100)
-    }
-    images.forEach(img => {
-      if (img.complete) onDone()
-      else {
-        img.addEventListener('load', onDone, { once: true })
-        img.addEventListener('error', onDone, { once: true })
+      const opened = printHtmlInNewWindow(docHtml)
+      if (!opened) {
+        printHtmlInHiddenIframe(docHtml, paperPreset, labels.length)
       }
-    })
+      return
+    }
+
+    printHtmlInHiddenIframe(docHtml, paperPreset, labels.length)
   }
 
   return (
@@ -628,11 +674,13 @@ export function BarcodePanel() {
           </select>
         </div>
         <p className="text-xs text-slate-500">
-          미리보기는 크게, 실제 인쇄는 선택 용지 크기에 맞춰 출력됩니다.
+          웹에서는 프린터에 직접 연결하지 않고, Windows 인쇄 창에서 <strong className="text-slate-700">Xprinter</strong>를 고른 뒤
+          인쇄합니다. 미리보기는 크게, 실제 출력은 선택한 용지(mm)에 맞춥니다.
           {paperKey === 'dt427b' && (
             <>
               {' '}
-              <strong className="text-slate-700">DT427B</strong>는 USB 열전사 드라이버와 맞추기 위해 새 창에서 인쇄합니다. 팝업이 차단되면 주소창에서 이 사이트의 팝업을 허용해 주세요.
+              <strong className="text-slate-700">DT427B</strong> 프리셋은 먼저 새 창으로 시도하고, 팝업이 막히면 자동으로 숨은
+              프레임 방식으로 넘어갑니다. 인쇄 창이 뜬 뒤 창을 닫지 말고 인쇄를 완료해 주세요.
             </>
           )}
         </p>
