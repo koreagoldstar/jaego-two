@@ -109,24 +109,28 @@ function buildBarcodePrintDocumentHtml(htmlLabels: string, paperPreset: LabelPre
 </html>`
 }
 
-/** 새 창 인쇄 — noopener 제거(일부 Chrome에서 print·참조 이상), 인쇄 완료 후에만 닫기 */
-function printHtmlInNewWindow(docHtml: string): boolean {
-  const w = window.open('about:blank', '_blank')
-  if (!w) return false
-  try {
-    w.document.open()
-    w.document.write(docHtml)
-    w.document.close()
-  } catch (e) {
-    console.error('[print] new window write failed', e)
+/**
+ * USB 열전사(Xprinter 등)는 iframe.print()보다 "일반 페이지"로 연 새 창에서 print()할 때 드라이버가 잡는 경우가 많음.
+ * 모든 용지 프리셋에서 동일하게: 새 창 우선 → 실패 시 iframe.
+ */
+function attachPrintLifecycle(w: Window, extraCleanup?: () => void) {
+  const cleanup = () => {
     try {
-      w.close()
+      extraCleanup?.()
     } catch {
       /* ignore */
     }
-    return false
+    try {
+      if (!w.closed) w.close()
+    } catch {
+      /* ignore */
+    }
   }
+  w.addEventListener('afterprint', () => setTimeout(cleanup, 400), { once: true })
+  setTimeout(cleanup, 120000)
+}
 
+function runPrintWhenImagesReady(w: Window) {
   const schedulePrint = () => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -141,25 +145,9 @@ function printHtmlInNewWindow(docHtml: string): boolean {
   }
 
   const imgs = Array.from(w.document.images)
-  const cleanup = () => {
-    try {
-      if (!w.closed) w.close()
-    } catch {
-      /* ignore */
-    }
-  }
-  w.addEventListener(
-    'afterprint',
-    () => {
-      setTimeout(cleanup, 400)
-    },
-    { once: true }
-  )
-  setTimeout(cleanup, 120000)
-
   if (imgs.length === 0) {
     setTimeout(schedulePrint, 150)
-    return true
+    return
   }
   let pending = imgs.length
   const onDone = () => {
@@ -173,7 +161,56 @@ function printHtmlInNewWindow(docHtml: string): boolean {
       img.addEventListener('error', onDone, { once: true })
     }
   })
-  return true
+}
+
+/** Blob URL로 문서를 연 뒤 인쇄(열전사 드라이버 호환에 유리한 경우가 많음) */
+function printHtmlInNewWindow(docHtml: string): boolean {
+  let objectUrl: string | null = null
+  try {
+    const blob = new Blob([docHtml], { type: 'text/html;charset=utf-8' })
+    objectUrl = URL.createObjectURL(blob)
+    const w = window.open(objectUrl, '_blank')
+    if (!w) {
+      URL.revokeObjectURL(objectUrl)
+      return false
+    }
+    attachPrintLifecycle(w, () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl)
+        objectUrl = null
+      }
+    })
+
+    if (w.document.readyState === 'complete') {
+      runPrintWhenImagesReady(w)
+    } else {
+      w.addEventListener('load', () => runPrintWhenImagesReady(w), { once: true })
+    }
+    return true
+  } catch (e) {
+    console.error('[print] blob window failed', e)
+    if (objectUrl) URL.revokeObjectURL(objectUrl)
+  }
+
+  let w2: Window | null = null
+  try {
+    w2 = window.open('about:blank', '_blank')
+    if (!w2) return false
+    w2.document.open()
+    w2.document.write(docHtml)
+    w2.document.close()
+    attachPrintLifecycle(w2)
+    runPrintWhenImagesReady(w2)
+    return true
+  } catch (err) {
+    console.error('[print] about:blank write failed', err)
+    try {
+      w2?.close()
+    } catch {
+      /* ignore */
+    }
+    return false
+  }
 }
 
 function printHtmlInHiddenIframe(docHtml: string, paperPreset: LabelPreset, labelCount: number) {
@@ -545,18 +582,11 @@ export function BarcodePanel() {
 
     if (!htmlLabels) return
 
-    const useThermalWindow = paperKey === 'dt427b'
-    const docHtml = buildBarcodePrintDocumentHtml(htmlLabels, paperPreset, useThermalWindow)
-
-    if (useThermalWindow) {
-      const opened = printHtmlInNewWindow(docHtml)
-      if (!opened) {
-        printHtmlInHiddenIframe(docHtml, paperPreset, labels.length)
-      }
-      return
+    const docHtml = buildBarcodePrintDocumentHtml(htmlLabels, paperPreset, true)
+    const opened = printHtmlInNewWindow(docHtml)
+    if (!opened) {
+      printHtmlInHiddenIframe(docHtml, paperPreset, labels.length)
     }
-
-    printHtmlInHiddenIframe(docHtml, paperPreset, labels.length)
   }
 
   return (
@@ -674,15 +704,9 @@ export function BarcodePanel() {
           </select>
         </div>
         <p className="text-xs text-slate-500">
-          웹에서는 프린터에 직접 연결하지 않고, Windows 인쇄 창에서 <strong className="text-slate-700">Xprinter</strong>를 고른 뒤
-          인쇄합니다. 미리보기는 크게, 실제 출력은 선택한 용지(mm)에 맞춥니다.
-          {paperKey === 'dt427b' && (
-            <>
-              {' '}
-              <strong className="text-slate-700">DT427B</strong> 프리셋은 먼저 새 창으로 시도하고, 팝업이 막히면 자동으로 숨은
-              프레임 방식으로 넘어갑니다. 인쇄 창이 뜬 뒤 창을 닫지 말고 인쇄를 완료해 주세요.
-            </>
-          )}
+          웹은 USB로 직접 제어하지 않고 Windows 인쇄 창에서 <strong className="text-slate-700">Xprinter</strong>를 선택합니다.
+          「바로 인쇄」는 먼저 <strong className="text-slate-700">새 탭</strong>으로 열리며(열전사 드라이버 호환), 팝업이 막히면 숨은
+          프레임으로 다시 시도합니다. 인쇄 창에서 프린터·용지를 고른 뒤 인쇄를 마칠 때까지 탭을 닫지 마세요.
         </p>
       </div>
 
