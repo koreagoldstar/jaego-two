@@ -61,7 +61,7 @@ export function BulkOutClient() {
 
       const id = await findItemIdByBarcode(supabase, user.id, trimmed)
       if (!id) {
-        setMsg({ type: 'err', text: `등록되지 않은 바코드: ${trimmed}` })
+        setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
         return
       }
 
@@ -188,7 +188,7 @@ export function BulkOutClient() {
   return (
     <div className="space-y-4">
       <p className="text-center text-xs text-slate-500 leading-relaxed px-1">
-        여러 제품 바코드를 연속으로 찍고, 프로젝트 1개로 한 번에 출고 처리합니다.
+        여러 제품 QR 코드를 연속으로 찍고, 프로젝트 1개로 한 번에 출고 처리합니다.
       </p>
 
       <BarcodeCamera

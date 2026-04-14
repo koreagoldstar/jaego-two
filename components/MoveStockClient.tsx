@@ -76,12 +76,12 @@ export function MoveStockClient() {
       }
       return
     }
-    setMsg({ type: 'err', text: `등록되지 않은 바코드: ${trimmed}` })
+    setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
   }, [])
 
   resolveRef.current = resolveBarcode
 
-  /** 무선 바코드 건(키보드 입력처럼 들어옴) */
+  /** 무선 스캐너 입력(키보드처럼 들어옴) */
   useEffect(() => {
     let buffer = ''
     const onKey = (e: KeyboardEvent) => {
@@ -111,7 +111,7 @@ export function MoveStockClient() {
   async function run(direction: 'in' | 'out') {
     setMsg(null)
     if (!selectedId || amount < 1) {
-      setMsg({ type: 'err', text: '바코드로 품목을 먼저 선택하세요.' })
+      setMsg({ type: 'err', text: '스캔으로 품목을 먼저 선택하세요.' })
       return
     }
     setBusy(true)
@@ -167,11 +167,9 @@ export function MoveStockClient() {
               <p className="text-[11px] text-slate-400 uppercase tracking-wide">선택된 품목</p>
               <p className="text-lg font-bold leading-snug truncate">{selected.name}</p>
               <p className="text-sm text-slate-300 tabular-nums mt-1">현재 재고 {selected.quantity}</p>
-              {(selected.barcode_code || selected.serial_number) && (
+              {selected.barcode_code && (
                 <p className="text-xs text-slate-500 mt-1 truncate">
-                  {selected.barcode_code && <span>바코드 {selected.barcode_code}</span>}
-                  {selected.barcode_code && selected.serial_number && ' · '}
-                  {selected.serial_number && <span>시리얼 {selected.serial_number}</span>}
+                  <span>QR 코드 {selected.barcode_code}</span>
                 </p>
               )}
             </div>
@@ -195,7 +193,7 @@ export function MoveStockClient() {
         </div>
       ) : (
         <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/80 p-6 text-center text-sm text-slate-600">
-          바코드를 스캔하거나, 아래「직접 품목 고르기」에서 품목을 선택하세요.
+          QR 코드를 스캔하거나, 아래「직접 품목 고르기」에서 품목을 선택하세요.
         </div>
       )}
 

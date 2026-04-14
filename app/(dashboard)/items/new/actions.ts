@@ -1,8 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { allocateSequentialShCodes, formatShSequential, getNextShSequenceStart } from '@/lib/items/allocateShCodes'
-import { generateBarcodeValue, generateSerialValue } from '@/lib/items/codeGeneratorsServer'
+import { generateBarcodeValue } from '@/lib/items/codeGeneratorsServer'
 import { redirect } from 'next/navigation'
 
 /** 입출고 이력 보조 테이블 — 실패해도 품목 등록 자체는 성공시키고 서버 로그만 남김 (throw 시 Digest 오류 페이지로 이어짐) */
@@ -45,13 +44,7 @@ export async function createItemAction(formData: FormData) {
   const name = String(formData.get('name') ?? '').trim()
   if (!name) redirect('/items/new?error=' + encodeURIComponent('이름을 입력하세요'))
 
-  let sh = String(formData.get('sh') ?? '').trim()
-  if (!sh) {
-    const n = await getNextShSequenceStart(supabase, user.id)
-    sh = formatShSequential(n)
-  }
   const barcode_code = String(formData.get('barcode_code') ?? '').trim()
-  const serial_number = String(formData.get('serial_number') ?? '').trim()
   const quantity = Math.max(0, parseInt(String(formData.get('quantity') ?? '0'), 10) || 0)
   const location = String(formData.get('location') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
@@ -61,9 +54,9 @@ export async function createItemAction(formData: FormData) {
     .insert({
       user_id: user.id,
       name,
-      sh,
-      barcode_code: barcode_code || null,
-      serial_number: serial_number || null,
+      sh: null,
+      barcode_code: barcode_code || generateBarcodeValue(),
+      serial_number: null,
       quantity,
       location: location || null,
       description: description || '',
@@ -107,17 +100,9 @@ export async function createItemsBatchAction(formData: FormData) {
     Math.max(1, parseInt(String(formData.get('bulk_count') ?? '1'), 10) || 1)
   )
   const nameStyle = String(formData.get('bulk_name_style') ?? 'dash') === 'paren' ? 'paren' : 'dash'
-  const autoBarcode = formData.get('bulk_auto_barcode') === 'on'
-  const autoSerial = formData.get('bulk_auto_serial') === 'on'
-  const shBase = String(formData.get('bulk_sh') ?? '').trim()
-  const shAppendIndex = formData.get('bulk_sh_append_index') === 'on'
   const quantityEach = Math.max(0, parseInt(String(formData.get('bulk_quantity') ?? '0'), 10) || 0)
   const location = String(formData.get('bulk_location') ?? '').trim()
   const description = String(formData.get('bulk_description') ?? '').trim()
-
-  const autoShList = !shBase
-    ? await allocateSequentialShCodes(supabase, user.id, count)
-    : null
 
   const rows: Array<{
     user_id: string
@@ -134,19 +119,12 @@ export async function createItemsBatchAction(formData: FormData) {
     const name =
       nameStyle === 'paren' ? `${prefix} (${i})` : `${prefix}-${String(i).padStart(3, '0')}`
 
-    let sh: string | null = null
-    if (autoShList) {
-      sh = autoShList[i - 1] ?? null
-    } else if (shBase) {
-      sh = shAppendIndex ? `${shBase}-${String(i).padStart(3, '0')}` : shBase
-    }
-
     rows.push({
       user_id: user.id,
       name,
-      sh,
-      barcode_code: autoBarcode ? generateBarcodeValue() : null,
-      serial_number: autoSerial ? generateSerialValue() : null,
+      sh: null,
+      barcode_code: generateBarcodeValue(),
+      serial_number: null,
       quantity: quantityEach,
       location: location || null,
       description: description || '',

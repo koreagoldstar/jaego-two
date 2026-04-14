@@ -24,7 +24,7 @@ export function ScanClient() {
         router.push(`/move-app?item=${id}`)
         return
       }
-      setHint(`등록되지 않은 코드: ${code}`)
+      setHint(`등록되지 않은 QR 코드: ${code}`)
     },
     [router]
   )

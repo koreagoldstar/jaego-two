@@ -54,9 +54,7 @@ export default async function EditItemPage({
       )}
       <form action={boundUpdate} className="space-y-4 rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
         <Field label="이름 *" name="name" required defaultValue={item.name} />
-        <Field label="SH" name="sh" defaultValue={item.sh ?? ''} />
-        <Field label="바코드 값" name="barcode_code" defaultValue={item.barcode_code ?? ''} />
-        <Field label="시리얼" name="serial_number" defaultValue={item.serial_number ?? ''} />
+        <Field label="QR 스캔 코드" name="barcode_code" defaultValue={item.barcode_code ?? ''} />
         <div>
           <label className="block text-sm text-slate-600 mb-1">수량</label>
           <input

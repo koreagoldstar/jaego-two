@@ -23,9 +23,7 @@ export function ItemsListClient({ items }: Props) {
     return items.filter(item =>
       [
         item.name,
-        item.sh ?? '',
         item.barcode_code ?? '',
-        item.serial_number ?? '',
         item.location ?? '',
       ]
         .join(' ')
@@ -79,7 +77,7 @@ export function ItemsListClient({ items }: Props) {
       <input
         value={query}
         onChange={e => setQuery(e.target.value)}
-        placeholder="품목명·바코드·SH·시리얼·위치 검색"
+        placeholder="품목명·QR 코드·위치 검색"
         className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm"
       />
       {items.length > 0 && (
@@ -134,8 +132,7 @@ export function ItemsListClient({ items }: Props) {
                 <div className="min-w-0">
                   <p className="font-medium text-slate-900 truncate">{item.name}</p>
                   <p className="text-xs text-slate-500 truncate">
-                    {item.sh ? `SH ${item.sh}` : ''}
-                    {item.barcode_code ? ` · ${item.barcode_code}` : ''}
+                    {item.barcode_code ? `QR ${item.barcode_code}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

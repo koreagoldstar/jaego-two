@@ -181,8 +181,8 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number, barcodeMaxMm:
   `
 }
 
-function getItemLabelRows(item: Item, sep: string) {
-  return buildItemLabelVariants(item, sep).filter(row => row.payload)
+function getItemLabelRows(item: Item) {
+  return buildItemLabelVariants(item, '|').filter(row => row.payload)
 }
 
 function sanitizeFilePart(s: string): string {
@@ -328,10 +328,8 @@ function BarcodeStrip({
 
 export function BarcodePanel() {
   const [mode, setMode] = useState<'items' | 'manual'>('items')
-  const [shPrefix, setShPrefix] = useState('')
-  const [serial, setSerial] = useState('')
-  const [sep, setSep] = useState('|')
-  const [format, setFormat] = useState<CodeFormat>('CODE39')
+  const [manualCode, setManualCode] = useState('')
+  const format: CodeFormat = 'QR'
   const [paperKey, setPaperKey] = useState<string>('58x40')
 
   const [items, setItems] = useState<Item[]>([])
@@ -339,7 +337,7 @@ export function BarcodePanel() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState('')
 
-  const manualPayload = [shPrefix.trim(), serial.trim()].filter(Boolean).join(sep || '|')
+  const manualPayload = manualCode.trim()
 
   useEffect(() => {
     let cancelled = false
@@ -364,16 +362,15 @@ export function BarcodePanel() {
   }, [])
 
   useEffect(() => {
-    const s = sep || '|'
     setSelected(prev => {
       const next = new Set<string>()
       prev.forEach(id => {
         const item = items.find(i => i.id === id)
-        if (item && getItemLabelRows(item, s).length > 0) next.add(id)
+        if (item && getItemLabelRows(item).length > 0) next.add(id)
       })
       return next
     })
-  }, [sep, items])
+  }, [items])
 
   const filteredItems = useMemo(() => {
     const q = filter.trim().toLowerCase()
@@ -381,9 +378,7 @@ export function BarcodePanel() {
     return items.filter(
       i =>
         i.name.toLowerCase().includes(q) ||
-        (i.barcode_code?.toLowerCase().includes(q) ?? false) ||
-        (i.sh?.toLowerCase().includes(q) ?? false) ||
-        (i.serial_number?.toLowerCase().includes(q) ?? false)
+        (i.barcode_code?.toLowerCase().includes(q) ?? false)
     )
   }, [items, filter])
 
@@ -392,15 +387,14 @@ export function BarcodePanel() {
   const itemRows = useMemo(
     () =>
       selectedList.flatMap(item =>
-        getItemLabelRows(item, sep || '|').map(row => ({
+        getItemLabelRows(item).map(row => ({
           item,
           unitIndex: row.index,
           payload: row.payload!,
           barcode: row.barcode,
-          serial: row.serial,
         }))
       ),
-    [selectedList, sep]
+    [selectedList]
   )
 
   const validItemRows = itemRows
@@ -417,13 +411,12 @@ export function BarcodePanel() {
   const selectAllFiltered = useCallback(() => {
     setSelected(prev => {
       const next = new Set(prev)
-      const s = sep || '|'
       filteredItems.forEach(i => {
-        if (getItemLabelRows(i, s).length > 0) next.add(i.id)
+        if (getItemLabelRows(i).length > 0) next.add(i.id)
       })
       return next
     })
-  }, [filteredItems, sep])
+  }, [filteredItems])
 
   const clearSelection = useCallback(() => setSelected(new Set()), [])
 
@@ -637,13 +630,12 @@ export function BarcodePanel() {
               payload: manualPayload,
             },
           ]
-        : validItemRows.map(({ item, payload, unitIndex, serial }) => ({
+        : validItemRows.map(({ item, payload, unitIndex }) => ({
             caption: compactPrint ? '' : `${item.name} #${unitIndex}`,
             metaLines: compactPrint
               ? []
               : [
-                  item.sh ? `SH: ${item.quantity > 1 ? `${item.sh}-${String(unitIndex).padStart(3, '0')}` : item.sh}` : '',
-                  serial ? `Serial: ${serial}` : '',
+                  item.barcode_code ? `코드: ${item.barcode_code}` : '',
                 ].filter(Boolean),
             payload,
           }))
@@ -758,28 +750,9 @@ export function BarcodePanel() {
 
       <div className="flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-sm text-slate-600 mb-1">구분자 (직접·품목 공통)</label>
-          <input
-            value={sep}
-            onChange={e => setSep(e.target.value)}
-            className="w-20 rounded-xl border border-slate-200 px-2 py-2 text-sm text-center"
-            maxLength={4}
-          />
-        </div>
-        <div>
           <label className="block text-sm text-slate-600 mb-1">포맷</label>
-          <select
-            value={format}
-            onChange={e => setFormat(e.target.value as CodeFormat)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-          >
-            <option value="CODE128">CODE128 (1D 바코드)</option>
-            <option value="CODE39">CODE39</option>
-            <option value="QR">QR코드 (2D·카메라 스캔)</option>
-          </select>
-          <p className="text-xs text-slate-500 mt-1 max-w-md">
-            QR은 같은 값도 패턴이 커서 라벨에 잘 보이고, 휴대폰 카메라로 읽기 쉽습니다. 레이저 1D 스캐너만 있으면 CODE128을 쓰세요.
-          </p>
+          <div className="rounded-xl border border-slate-200 px-3 py-2 text-sm bg-slate-50 text-slate-700">QR코드 (고정)</div>
+          <p className="text-xs text-slate-500 mt-1 max-w-md">인식률을 위해 QR 코드만 생성/인쇄합니다.</p>
         </div>
         <div>
           <label className="block text-sm text-slate-600 mb-1">라벨 용지 (가로×세로 mm)</label>
@@ -804,8 +777,7 @@ export function BarcodePanel() {
       {mode === 'items' ? (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
-            품목 라벨 값은 <strong className="text-slate-800">SH / 시리얼 / 바코드</strong> 중{' '}
-            <strong className="text-slate-800">가장 짧은 값</strong>을 우선 사용해 1D 인식률을 높입니다.
+            품목에 저장된 <strong className="text-slate-800">QR 스캔 코드</strong>를 라벨로 만듭니다.
           </p>
           {itemsLoading ? (
             <div className="flex justify-center py-8 text-slate-500">
@@ -820,7 +792,7 @@ export function BarcodePanel() {
               <input
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
-                placeholder="이름·바코드·SH·시리얼 검색"
+                placeholder="이름·QR 코드 검색"
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
               />
               <div className="flex flex-wrap gap-2">
@@ -844,7 +816,7 @@ export function BarcodePanel() {
               </div>
               <div className="max-h-[min(52vh,360px)] overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
                 {filteredItems.map(item => {
-                  const pCount = getItemLabelRows(item, sep || '|').length
+                  const pCount = getItemLabelRows(item).length
                   const checked = selected.has(item.id)
                   return (
                     <label
@@ -868,7 +840,7 @@ export function BarcodePanel() {
                               재고 기준 라벨: <span className="font-mono text-slate-700">{pCount}개</span>
                             </>
                           ) : (
-                            <span className="text-amber-700">바코드·SH·시리얼 중 하나 이상 필요</span>
+                            <span className="text-amber-700">QR 스캔 코드가 필요합니다</span>
                           )}
                         </p>
                       </div>
@@ -882,26 +854,16 @@ export function BarcodePanel() {
       ) : (
         <>
           <p className="text-sm text-slate-600">
-            SH·시리얼을 넣으면 <code className="text-xs bg-slate-100 px-1 rounded">{sep || '|'}</code> 로 이어
-            CODE128/CODE39 또는 QR코드로 만듭니다.
+            스캔 코드를 입력하면 QR코드를 만듭니다.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-1">
             <div>
-              <label className="block text-sm text-slate-600 mb-1">SH / 접두어</label>
+              <label className="block text-sm text-slate-600 mb-1">스캔 코드</label>
               <input
-                value={shPrefix}
-                onChange={e => setShPrefix(e.target.value)}
+                value={manualCode}
+                onChange={e => setManualCode(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-                placeholder="예: MIC-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-600 mb-1">시리얼</label>
-              <input
-                value={serial}
-                onChange={e => setSerial(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-                placeholder="예: SN2026001"
+                placeholder="예: B8F31A20D7E9"
               />
             </div>
           </div>
@@ -926,25 +888,20 @@ export function BarcodePanel() {
           </>
         ) : (
           <>
-            <p className="text-xs text-slate-500 mb-3 print:text-slate-800">
-              선택한 품목별 바코드 ({validItemRows.length}개)
-            </p>
+            <p className="text-xs text-slate-500 mb-3 print:text-slate-800">선택한 품목별 QR 코드 ({validItemRows.length}개)</p>
             <div className="flex flex-col gap-0">
               {validItemRows.length === 0 ? (
                 <span className="text-slate-400 text-sm text-center py-8">
-                  품목을 선택하세요. (바코드 값 또는 SH·시리얼이 있는 품목만 인쇄됩니다)
+                  품목을 선택하세요. (QR 스캔 코드가 있는 품목만 인쇄됩니다)
                 </span>
               ) : (
-                validItemRows.map(({ item, payload, unitIndex, serial }) => (
+                validItemRows.map(({ item, payload, unitIndex }) => (
                   <BarcodeStrip
                     key={`${item.id}-${unitIndex}`}
                     payload={payload}
                     format={format}
                     caption={`${item.name} #${unitIndex}`}
-                    metaLines={[
-                      item.sh ? `SH: ${item.quantity > 1 ? `${item.sh}-${String(unitIndex).padStart(3, '0')}` : item.sh}` : '',
-                      serial ? `Serial: ${serial}` : '',
-                    ].filter(Boolean)}
+                    metaLines={[item.barcode_code ? `코드: ${item.barcode_code}` : ''].filter(Boolean)}
                     showEncodingLine={false}
                     paperHeightMm={hMm}
                   />
@@ -977,7 +934,7 @@ export function BarcodePanel() {
         </button>
       </div>
       <p className="text-xs text-slate-500 text-center">
-        인쇄는 미리보기와 별도로 고해상도 바코드를 용지 한 장에 맞춥니다. 어긋나면 용지 크기·여백 0·배율 100%를 다시 확인하세요.
+        인쇄는 미리보기와 별도로 고해상도 QR 코드를 용지 한 장에 맞춥니다. 어긋나면 용지 크기·여백 0·배율 100%를 다시 확인하세요.
       </p>
     </div>
   )

@@ -44,9 +44,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
         <h1 className="text-xl font-bold text-slate-900">{item.name}</h1>
         <dl className="text-sm space-y-2">
           <Row label="수량" value={<span className="text-2xl font-semibold text-blue-600">{item.quantity}</span>} />
-          {item.sh && <Row label="SH" value={item.sh} />}
-          {item.barcode_code && <Row label="바코드" value={item.barcode_code} />}
-          {item.serial_number && <Row label="시리얼" value={item.serial_number} />}
+          {item.barcode_code && <Row label="QR 스캔 코드" value={item.barcode_code} />}
           {item.location && <Row label="위치" value={item.location} />}
           {item.description && <Row label="메모" value={item.description} />}
         </dl>
@@ -64,8 +62,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
             {labelRows.map(row => (
               <li key={`${item.id}-${row.index}`} className="px-3 py-2 text-xs text-slate-700 space-y-1">
                 <p className="font-medium text-slate-900">#{row.index}</p>
-                {row.barcode && <p>바코드: {row.barcode}</p>}
-                {row.serial && <p>시리얼: {row.serial}</p>}
+                {row.barcode && <p>QR 코드값: {row.barcode}</p>}
                 {row.payload && <p className="text-slate-500 break-all">인쇄값: {row.payload}</p>}
               </li>
             ))}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { createItemAction, createItemsBatchAction } from '@/app/(dashboard)/items/new/actions'
-import { generateBarcodeValue, generateSerialValue } from '@/lib/items/codeGenerators'
+import { generateBarcodeValue } from '@/lib/items/codeGenerators'
 import { Sparkles } from 'lucide-react'
 
 type Props = {
@@ -13,8 +13,7 @@ type Props = {
 
 export function NewItemForm({ initialError, defaultMode = 'single' }: Props) {
   const [mode, setMode] = useState<'single' | 'bulk'>(defaultMode)
-  const [barcode, setBarcode] = useState('')
-  const [serial, setSerial] = useState('')
+  const [barcode, setBarcode] = useState(generateBarcodeValue())
 
   return (
     <div className="space-y-4">
@@ -46,22 +45,10 @@ export function NewItemForm({ initialError, defaultMode = 'single' }: Props) {
       {mode === 'single' ? (
         <form action={createItemAction} className="space-y-4 rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
           <Field label="이름 *" name="name" required placeholder="예: 무선 마이크" />
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">SH (내부코드)</label>
-            <input
-              name="sh"
-              placeholder="비우면 SH-0000001 형식으로 자동 부여"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              비우면 기존 품목의 <code className="text-[11px] bg-slate-100 px-1 rounded">SH-숫자</code> 중 가장 큰
-              번호 다음부터 순서대로 붙습니다.
-            </p>
-          </div>
 
           <div>
             <div className="flex items-center justify-between gap-2 mb-1">
-              <label className="block text-sm text-slate-600">바코드 값</label>
+              <label className="block text-sm text-slate-600">QR 스캔 코드</label>
               <div className="flex flex-wrap gap-1.5 justify-end">
                 <button
                   type="button"
@@ -77,43 +64,10 @@ export function NewItemForm({ initialError, defaultMode = 'single' }: Props) {
               name="barcode_code"
               value={barcode}
               onChange={e => setBarcode(e.target.value)}
-              placeholder="스캔에 쓸 문자열"
+              placeholder="QR에 넣을 짧은 코드"
               className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <label className="block text-sm text-slate-600">시리얼</label>
-              <button
-                type="button"
-                onClick={() => setSerial(generateSerialValue())}
-                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-800 hover:bg-violet-100"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                자동
-              </button>
-            </div>
-            <input
-              name="serial_number"
-              value={serial}
-              onChange={e => setSerial(e.target.value)}
-              placeholder="표시용 시리얼"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setBarcode(generateBarcodeValue())
-                setSerial(generateSerialValue())
-              }}
-              className="text-xs font-medium text-slate-600 underline underline-offset-2 hover:text-violet-700"
-            >
-              바코드 + 시리얼 둘 다 자동 생성
-            </button>
+            <p className="text-xs text-slate-500 mt-1">앱은 이 코드만 QR로 생성하고 스캔 매칭합니다.</p>
           </div>
 
           <div>
@@ -180,34 +134,9 @@ export function NewItemForm({ initialError, defaultMode = 'single' }: Props) {
             </div>
           </div>
 
-          <fieldset className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 space-y-2">
-            <legend className="text-xs font-semibold text-slate-500 px-1">자동 생성</legend>
-            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-              <input type="checkbox" name="bulk_auto_barcode" defaultChecked className="rounded border-slate-300" />
-              바코드 값 자동 (건마다 다름)
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-              <input type="checkbox" name="bulk_auto_serial" defaultChecked className="rounded border-slate-300" />
-              시리얼 자동 (건마다 다름)
-            </label>
-          </fieldset>
-
-          <div>
-            <label className="block text-sm text-slate-600 mb-1">SH (선택)</label>
-            <input
-              name="bulk_sh"
-              placeholder="비우면 SH-0000001, SH-0000002 … 자동"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              비우면 일괄 등록 개수만큼 <code className="text-[11px] bg-slate-100 px-1 rounded">SH-0000001</code>{' '}
-              형식으로 연속 번호가 붙습니다.
-            </p>
-            <label className="flex items-center gap-2 mt-2 text-sm text-slate-600 cursor-pointer">
-              <input type="checkbox" name="bulk_sh_append_index" defaultChecked className="rounded border-slate-300" />
-              SH를 직접 적었을 때만: 끝에 -001, -002 붙이기
-            </label>
-          </div>
+          <p className="text-xs text-slate-500 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
+            일괄 등록은 각 품목에 QR 스캔 코드가 자동 생성됩니다.
+          </p>
 
           <div>
             <label className="block text-sm text-slate-600 mb-1">품목당 재고 수량(라벨 개수 기준)</label>

@@ -4,7 +4,7 @@ import type { StockTransaction } from '@/lib/supabase/types'
 export const dynamic = 'force-dynamic'
 
 type Row = StockTransaction & {
-  items: { name: string; sh: string | null; serial_number: string | null; barcode_code: string | null } | null
+  items: { name: string; barcode_code: string | null } | null
 }
 type InventoryEventRow = {
   id: string
@@ -24,7 +24,7 @@ export default async function TransactionsPage() {
 
   const { data: rows } = await supabase
     .from('stock_transactions')
-    .select('id, direction, amount, note, project, created_at, items(name, sh, serial_number, barcode_code)')
+    .select('id, direction, amount, note, project, created_at, items(name, barcode_code)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -46,9 +46,7 @@ export default async function TransactionsPage() {
       subtitle: [tx.project, tx.note].filter(Boolean).join(' · '),
       detailLines: [
         `구분: ${tx.direction === 'in' ? '입고' : '출고'}`,
-        tx.items?.sh ? `SH: ${tx.items.sh}` : '',
-        tx.items?.serial_number ? `시리얼: ${tx.items.serial_number}` : '',
-        tx.items?.barcode_code ? `바코드: ${tx.items.barcode_code}` : '',
+        tx.items?.barcode_code ? `QR 코드: ${tx.items.barcode_code}` : '',
       ].filter(Boolean),
       amountText: `${tx.direction === 'in' ? '+' : '−'}${tx.amount}`,
       amountClass: tx.direction === 'in' ? 'text-emerald-600' : 'text-orange-600',
