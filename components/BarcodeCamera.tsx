@@ -13,6 +13,51 @@ const UPSCALE_MAX = 2.5
 const PHOTO_UPSCALE_MAX = 3
 const DECODE_INTERVAL_MS = 72
 
+type NativeDetectedCode = { rawValue?: string }
+type NativeBarcodeDetector = {
+  detect: (input: ImageBitmapSource) => Promise<NativeDetectedCode[]>
+}
+
+function createNativeDetector(): NativeBarcodeDetector | null {
+  const DetectorCtor = (globalThis as { BarcodeDetector?: new (opts?: { formats?: string[] }) => NativeBarcodeDetector })
+    .BarcodeDetector
+  if (!DetectorCtor) return null
+  try {
+    return new DetectorCtor({
+      formats: [
+        'qr_code',
+        'code_128',
+        'code_39',
+        'ean_13',
+        'ean_8',
+        'upc_a',
+        'upc_e',
+        'itf',
+        'codabar',
+      ],
+    })
+  } catch {
+    return null
+  }
+}
+
+async function detectWithNativeDetector(
+  detector: NativeBarcodeDetector | null,
+  videoEl: HTMLVideoElement,
+): Promise<string | null> {
+  if (!detector) return null
+  try {
+    const detected = await detector.detect(videoEl)
+    for (const row of detected) {
+      const text = normalizeBarcodePayload(row.rawValue ?? '')
+      if (text) return text
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 function decodeVideoFrame(
   reader: BrowserMultiFormatReader,
   videoEl: HTMLVideoElement,
@@ -280,6 +325,7 @@ export function BarcodeCamera({
     let attachedVideo: HTMLVideoElement | null = null
     let stream: MediaStream | null = null
     let decodeTimer: ReturnType<typeof setInterval> | undefined
+    const nativeDetector = createNativeDetector()
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
 
@@ -357,10 +403,26 @@ export function BarcodeCamera({
 
       const startCanvasLoop = () => {
         let frameIndex = 0
+        let decoding = false
         decodeTimer = setInterval(() => {
+          if (decoding) return
           if (cancelled || !stream) return
-          const decoded = decodeVideoFrame(reader, videoEl, canvas, ctx, frameIndex++)
-          if (decoded) onResult({ getText: () => decoded } as Result)
+          decoding = true
+          void (async () => {
+            try {
+              let decoded: string | null = null
+              if (frameIndex % 2 === 0) {
+                decoded = await detectWithNativeDetector(nativeDetector, videoEl)
+              }
+              if (!decoded) {
+                decoded = decodeVideoFrame(reader, videoEl, canvas, ctx, frameIndex)
+              }
+              frameIndex += 1
+              if (decoded) onResult({ getText: () => decoded } as Result)
+            } finally {
+              decoding = false
+            }
+          })()
         }, DECODE_INTERVAL_MS)
       }
 
