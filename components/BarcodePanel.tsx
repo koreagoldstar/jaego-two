@@ -51,14 +51,34 @@ function labelBarcodeMaxHeightMm(heightMm: number): number {
   return Math.max(6, heightMm - textReserve - pad * 2)
 }
 
-/** iframe 인쇄 문서용 — @page·html·body를 모두 동일 mm로 맞춰 드라이버·브라우저 축소를 줄임 */
+/** 열전사 203dpi 기준 mm→px (브라우저가 PNG를 물리 크기에 맞추기 쉽게) */
+const DPMM_203 = 203 / 25.4
+
+function scaleCanvasToMax(source: HTMLCanvasElement, maxWPx: number, maxHPx: number): HTMLCanvasElement {
+  const w = source.width
+  const h = source.height
+  if (w <= 0 || h <= 0) return source
+  const scale = Math.min(maxWPx / w, maxHPx / h, 1)
+  if (scale >= 0.999) return source
+  const out = document.createElement('canvas')
+  out.width = Math.max(1, Math.round(w * scale))
+  out.height = Math.max(1, Math.round(h * scale))
+  const ctx = out.getContext('2d')
+  if (!ctx) return source
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(source, 0, 0, out.width, out.height)
+  return out
+}
+
+/** iframe 인쇄 문서용 — @page·html·body·라벨을 동일 mm로 고정, 인쇄 미리보기와 동일 규칙을 @media print에도 복제 */
 function buildPrintIframeStyles(widthMm: number, heightMm: number): string {
   const pad = 1.5
   const barcodeMaxMm = labelBarcodeMaxHeightMm(heightMm)
+  const innerW = `calc(${widthMm}mm - ${pad * 2}mm)`
   return `
       @page {
         size: ${widthMm}mm ${heightMm}mm;
-        margin: 0;
+        margin: 0 !important;
       }
       * {
         box-sizing: border-box;
@@ -70,26 +90,30 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number): string {
         padding: 0;
         width: ${widthMm}mm;
         height: ${heightMm}mm;
+        overflow: hidden;
       }
       body {
-        margin: 0;
-        padding: 0;
+        margin: 0 !important;
+        padding: 0 !important;
         width: ${widthMm}mm;
-        min-height: ${heightMm}mm;
         height: ${heightMm}mm;
+        min-height: ${heightMm}mm;
+        max-height: ${heightMm}mm;
         background: #fff;
+        overflow: hidden;
       }
       .label {
         width: ${widthMm}mm;
         height: ${heightMm}mm;
         min-height: ${heightMm}mm;
+        max-height: ${heightMm}mm;
         box-sizing: border-box;
         padding: ${pad}mm;
         margin: 0;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        justify-content: center;
+        align-items: stretch;
+        justify-content: flex-start;
         gap: 0.35mm;
         overflow: hidden;
         page-break-after: always;
@@ -119,12 +143,23 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number): string {
       .barcode {
         display: block;
         margin: 0 auto;
-        flex: 0 1 auto;
-        max-width: calc(${widthMm}mm - ${pad * 2}mm);
-        max-height: ${barcodeMaxMm}mm;
-        width: auto;
+        flex: 1 1 auto;
+        width: ${innerW};
+        max-width: ${innerW};
         height: auto;
+        max-height: ${barcodeMaxMm}mm;
         object-fit: contain;
+      }
+      @media print {
+        @page {
+          size: ${widthMm}mm ${heightMm}mm;
+          margin: 0 !important;
+        }
+        html, body {
+          width: ${widthMm}mm !important;
+          height: ${heightMm}mm !important;
+          overflow: hidden !important;
+        }
       }
   `
 }
@@ -215,6 +250,8 @@ export function BarcodePanel() {
   const [sep, setSep] = useState('|')
   const [format, setFormat] = useState<'CODE128' | 'CODE39'>('CODE128')
   const [paperKey, setPaperKey] = useState<string>('58x40')
+  /** 프리셋은 가로×세로 순; 실제 스티커 방향이 다르면 체크해 인쇄·미리보기 모두 동일하게 회전 */
+  const [swapPrintAxes, setSwapPrintAxes] = useState(false)
 
   const [items, setItems] = useState<Item[]>([])
   const [itemsLoading, setItemsLoading] = useState(true)
@@ -330,18 +367,25 @@ export function BarcodePanel() {
     [format]
   )
 
-  const drawToDataUrl = useCallback(
-    (payload: string): string | null => {
+  /** 인쇄 iframe용: 203dpi에 맞춘 픽셀 크기로 바코드를 그린 뒤 mm 레이아웃과 맞춤 */
+  const drawToDataUrlForPrint = useCallback(
+    (payload: string, labelWidthMm: number, labelHeightMm: number): string | null => {
+      const padMm = 1.5
+      const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm)
+      const maxWPx = Math.max(48, Math.round((labelWidthMm - padMm * 2) * DPMM_203))
+      const maxHPx = Math.max(32, Math.round(barcodeMaxMm * DPMM_203))
       const canvas = document.createElement('canvas')
       try {
+        const barHeight = Math.min(160, Math.max(48, Math.floor(maxHPx * 0.88)))
         JsBarcode(canvas, payload, {
           format,
           width: 2,
-          height: 92,
+          height: barHeight,
           displayValue: false,
-          margin: 6,
+          margin: Math.max(2, Math.round(4 * (DPMM_203 / 8))),
         })
-        return canvas.toDataURL('image/png')
+        const scaled = scaleCanvasToMax(canvas, maxWPx, maxHPx)
+        return scaled.toDataURL('image/png')
       } catch {
         return null
       }
@@ -379,7 +423,16 @@ export function BarcodePanel() {
     () => LABEL_PRESETS.find(p => p.key === paperKey) ?? LABEL_PRESETS[0],
     [paperKey]
   )
-  const printBarcodeMaxHeightMm = useMemo(() => labelBarcodeMaxHeightMm(paperPreset.heightMm), [paperPreset.heightMm])
+  const printDims = useMemo(() => {
+    if (swapPrintAxes) {
+      return { widthMm: paperPreset.heightMm, heightMm: paperPreset.widthMm }
+    }
+    return { widthMm: paperPreset.widthMm, heightMm: paperPreset.heightMm }
+  }, [paperPreset.heightMm, paperPreset.widthMm, swapPrintAxes])
+  const printBarcodeMaxHeightMm = useMemo(
+    () => labelBarcodeMaxHeightMm(printDims.heightMm),
+    [printDims.heightMm]
+  )
   const canPrint = mode === 'manual' ? !!manualPayload : validItemRows.length > 0
   const canDownload = canPrint
 
@@ -405,9 +458,12 @@ export function BarcodePanel() {
             payload,
           }))
 
+    const wMm = printDims.widthMm
+    const hMm = printDims.heightMm
+
     const htmlLabels = labels
       .map(label => {
-        const barcodeDataUrl = drawToDataUrl(label.payload)
+        const barcodeDataUrl = drawToDataUrlForPrint(label.payload, wMm, hMm)
         if (!barcodeDataUrl) return ''
         const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
         const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
@@ -432,8 +488,8 @@ export function BarcodePanel() {
       position: 'fixed',
       left: '-10000px',
       top: '0',
-      width: `${Math.max(320, Math.ceil(paperPreset.widthMm * 4))}px`,
-      height: `${Math.max(400, Math.ceil(paperPreset.heightMm * 4 * Math.max(1, labels.length)))}px`,
+      width: `${Math.max(320, Math.ceil(wMm * 4))}px`,
+      height: `${Math.max(400, Math.ceil(hMm * 4 * Math.max(1, labels.length)))}px`,
       border: '0',
       opacity: '0',
       pointerEvents: 'none',
@@ -454,7 +510,7 @@ export function BarcodePanel() {
   <head>
     <meta charset="utf-8" />
     <title>Barcode Print</title>
-    <style>${buildPrintIframeStyles(paperPreset.widthMm, paperPreset.heightMm)}</style>
+    <style>${buildPrintIframeStyles(wMm, hMm)}</style>
   </head>
   <body>${htmlLabels}</body>
 </html>`)
@@ -496,10 +552,10 @@ export function BarcodePanel() {
         dangerouslySetInnerHTML={{
           __html: `
 @media print {
-  @page { margin: 0 !important; size: ${paperPreset.widthMm}mm ${paperPreset.heightMm}mm; }
+  @page { margin: 0 !important; size: ${printDims.widthMm}mm ${printDims.heightMm}mm; }
   html, body {
-    width: ${paperPreset.widthMm}mm !important;
-    min-height: ${paperPreset.heightMm}mm !important;
+    width: ${printDims.widthMm}mm !important;
+    min-height: ${printDims.heightMm}mm !important;
     margin: 0 !important;
     padding: 0 !important;
   }
@@ -509,8 +565,8 @@ export function BarcodePanel() {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: ${paperPreset.widthMm}mm !important;
-    min-height: ${paperPreset.heightMm}mm !important;
+    width: ${printDims.widthMm}mm !important;
+    min-height: ${printDims.heightMm}mm !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -522,10 +578,10 @@ export function BarcodePanel() {
     box-sizing: border-box !important;
   }
   #barcode-print-area .barcode-print-label {
-    width: ${paperPreset.widthMm}mm !important;
-    height: ${paperPreset.heightMm}mm !important;
-    min-height: ${paperPreset.heightMm}mm !important;
-    max-height: ${paperPreset.heightMm}mm !important;
+    width: ${printDims.widthMm}mm !important;
+    height: ${printDims.heightMm}mm !important;
+    min-height: ${printDims.heightMm}mm !important;
+    max-height: ${printDims.heightMm}mm !important;
     padding: 1.5mm !important;
     gap: 0.35mm !important;
     box-sizing: border-box !important;
@@ -550,7 +606,7 @@ export function BarcodePanel() {
     margin: 0 auto !important;
     width: auto !important;
     height: auto !important;
-    max-width: calc(${paperPreset.widthMm}mm - 3mm) !important;
+    max-width: calc(${printDims.widthMm}mm - 3mm) !important;
     max-height: ${printBarcodeMaxHeightMm}mm !important;
     object-fit: contain !important;
   }
@@ -616,10 +672,21 @@ export function BarcodePanel() {
               </option>
             ))}
           </select>
+          <label className="mt-2 flex items-start gap-2 text-sm text-slate-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={swapPrintAxes}
+              onChange={e => setSwapPrintAxes(e.target.checked)}
+              className="mt-0.5 rounded border-slate-300 shrink-0"
+            />
+            <span>
+              가로·세로 바꿔 인쇄 (스티커가 세로 방향이거나 롤이 90° 돌아간 경우)
+            </span>
+          </label>
           <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
             실제 라벨 스티커와 같은 크기를 고르세요. 인쇄 창이 뜨면 <strong className="text-slate-700">용지 크기</strong>를
-            여기와 같게 맞추고, <strong className="text-slate-700">배율 100%</strong>(페이지에 맞춤·축소 끔)으로 두면 크기가
-            가장 잘 맞습니다.
+            위 선택값(체크 시 {printDims.widthMm}×{printDims.heightMm}mm)과 같게 맞추고,{' '}
+            <strong className="text-slate-700">배율 100%</strong>(페이지에 맞춤·축소 끔)으로 두면 크기가 가장 잘 맞습니다.
           </p>
         </div>
       </div>
@@ -741,7 +808,7 @@ export function BarcodePanel() {
                   payload={manualPayload}
                   format={format}
                   showEncodingLine={false}
-                  paperHeightMm={paperPreset.heightMm}
+                  paperHeightMm={printDims.heightMm}
                 />
               ) : (
                 <span className="text-slate-400 text-sm">값을 입력하면 미리보기가 나옵니다.</span>
@@ -770,7 +837,7 @@ export function BarcodePanel() {
                       serial ? `Serial: ${serial}` : '',
                     ].filter(Boolean)}
                     showEncodingLine={false}
-                    paperHeightMm={paperPreset.heightMm}
+                    paperHeightMm={printDims.heightMm}
                   />
                 ))
               )}
