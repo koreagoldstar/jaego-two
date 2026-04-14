@@ -290,6 +290,13 @@ export function BarcodePanel() {
     }
   }
 
+  const paperPreset = useMemo(
+    () => LABEL_PRESETS.find(p => p.key === paperKey) ?? LABEL_PRESETS[0],
+    [paperKey]
+  )
+  const canPrint = mode === 'manual' ? !!manualPayload : validItemRows.length > 0
+  const canDownload = canPrint
+
   function printBarcode() {
     if (mode === 'manual' && !manualPayload) return
     if (mode === 'items' && validItemRows.length === 0) return
@@ -332,13 +339,20 @@ export function BarcodePanel() {
     if (!htmlLabels) return
 
     const iframe = document.createElement('iframe')
-    iframe.style.position = 'fixed'
-    iframe.style.right = '0'
-    iframe.style.bottom = '0'
-    iframe.style.width = '0'
-    iframe.style.height = '0'
-    iframe.style.border = '0'
+    // 0×0 iframe은 Chromium에서 인쇄 미리보기가 비거나 print()가 동작하지 않는 경우가 많음.
+    // 레이아웃·인쇄 엔진이 문서 크기를 알 수 있도록 화면 밖에 실제 픽셀 크기를 둔다.
     iframe.setAttribute('aria-hidden', 'true')
+    Object.assign(iframe.style, {
+      position: 'fixed',
+      left: '-10000px',
+      top: '0',
+      width: `${Math.max(320, Math.ceil(paperPreset.widthMm * 4))}px`,
+      height: `${Math.max(400, Math.ceil(paperPreset.heightMm * 4 * Math.max(1, labels.length)))}px`,
+      border: '0',
+      opacity: '0',
+      pointerEvents: 'none',
+      zIndex: '-1',
+    })
     document.body.appendChild(iframe)
 
     const frameDoc = iframe.contentDocument
@@ -402,21 +416,25 @@ export function BarcodePanel() {
     frameDoc.close()
 
     const finalize = () => {
-      frameWin.focus()
-      frameWin.print()
-      setTimeout(() => iframe.remove(), 1500)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          frameWin.focus()
+          frameWin.print()
+          setTimeout(() => iframe.remove(), 1500)
+        })
+      })
     }
 
     const images = Array.from(frameDoc.images)
     if (images.length === 0) {
-      setTimeout(finalize, 50)
+      setTimeout(finalize, 100)
       return
     }
 
     let pending = images.length
     const onDone = () => {
       pending -= 1
-      if (pending <= 0) setTimeout(finalize, 50)
+      if (pending <= 0) setTimeout(finalize, 100)
     }
     images.forEach(img => {
       if (img.complete) onDone()
@@ -426,11 +444,6 @@ export function BarcodePanel() {
       }
     })
   }
-
-  const canPrint =
-    mode === 'manual' ? !!manualPayload : validItemRows.length > 0
-  const canDownload = canPrint
-  const paperPreset = LABEL_PRESETS.find(p => p.key === paperKey) ?? LABEL_PRESETS[0]
 
   return (
     <div className="space-y-4 rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
