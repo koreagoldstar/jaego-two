@@ -7,8 +7,32 @@ import type { Item } from '@/lib/supabase/types'
 import { buildItemLabelVariants } from '@/lib/items/labelVariants'
 import { Loader2, Package, PencilLine, Printer } from 'lucide-react'
 
-/** 미리보기·바코드 줄 높이 계산용 (고정값 — 용지 mm 프리셋 없음) */
-const PREVIEW_LABEL_HEIGHT_MM = 40
+type LabelPreset = {
+  key: string
+  label: string
+  widthMm: number
+  heightMm: number
+}
+
+const LABEL_PRESETS: LabelPreset[] = [
+  { key: '40x20', label: '40 × 20mm', widthMm: 40, heightMm: 20 },
+  { key: '40x30', label: '40 × 30mm', widthMm: 40, heightMm: 30 },
+  { key: '50x30', label: '50 × 30mm', widthMm: 50, heightMm: 30 },
+  { key: '50.8x101.6', label: '2×4in (50.8 × 101.6mm)', widthMm: 50.8, heightMm: 101.6 },
+  { key: '58x40', label: '58 × 40mm (기본)', widthMm: 58, heightMm: 40 },
+  { key: '70x50', label: '70 × 50mm', widthMm: 70, heightMm: 50 },
+  { key: '100x60', label: '100 × 60mm', widthMm: 100, heightMm: 60 },
+  { key: '101.6x101.6', label: '4×4in (101.6mm)', widthMm: 101.6, heightMm: 101.6 },
+  { key: '101.6x152.4', label: '4×6in (101.6 × 152.4mm)', widthMm: 101.6, heightMm: 152.4 },
+  { key: '100x50', label: '100 × 50mm', widthMm: 100, heightMm: 50 },
+]
+
+/** 본문·여백을 제외한 바코드 이미지 최대 높이(mm) */
+function labelBarcodeMaxHeightMm(heightMm: number): number {
+  const pad = 1.5
+  const textReserve = Math.min(14, heightMm * 0.35)
+  return Math.max(6, heightMm - textReserve - pad * 2)
+}
 
 function getItemLabelRows(item: Item, sep: string) {
   return buildItemLabelVariants(item, sep).filter(row => row.payload)
@@ -24,7 +48,7 @@ function BarcodeStrip({
   caption,
   metaLines = [],
   showEncodingLine = true,
-  paperHeightMm = PREVIEW_LABEL_HEIGHT_MM,
+  paperHeightMm = 40,
 }: {
   payload: string
   format: 'CODE128' | 'CODE39'
@@ -102,6 +126,7 @@ export function BarcodePanel() {
   const [serial, setSerial] = useState('')
   const [sep, setSep] = useState('|')
   const [format, setFormat] = useState<'CODE128' | 'CODE39'>('CODE128')
+  const [paperKey, setPaperKey] = useState<string>('58x40')
 
   const [items, setItems] = useState<Item[]>([])
   const [itemsLoading, setItemsLoading] = useState(true)
@@ -246,7 +271,14 @@ export function BarcodePanel() {
   const canPrint = mode === 'manual' ? !!manualPayload : validItemRows.length > 0
   const canDownload = canPrint
 
-  /** 최초 바코드 인쇄와 동일: 시스템 인쇄 대화상자만 띄움 (iframe·용지 mm 없음) */
+  const paperPreset = useMemo(
+    () => LABEL_PRESETS.find(p => p.key === paperKey) ?? LABEL_PRESETS[0],
+    [paperKey]
+  )
+  const wMm = paperPreset.widthMm
+  const hMm = paperPreset.heightMm
+  const printBarcodeMaxHeightMm = useMemo(() => labelBarcodeMaxHeightMm(hMm), [hMm])
+
   function printBarcode() {
     if (mode === 'manual' && !manualPayload) return
     if (mode === 'items' && validItemRows.length === 0) return
@@ -261,19 +293,28 @@ export function BarcodePanel() {
         dangerouslySetInnerHTML={{
           __html: `
 @media print {
-  @page { margin: 10mm; size: auto; }
+  @page {
+    size: ${wMm}mm ${hMm}mm;
+    margin: 0 !important;
+  }
+  html, body {
+    width: ${wMm}mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
   body * { visibility: hidden !important; }
   #barcode-print-area, #barcode-print-area * { visibility: visible !important; }
   #barcode-print-area {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: 100% !important;
+    width: ${wMm}mm !important;
+    min-height: ${hMm}mm !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: flex-start !important;
-    padding: 8mm !important;
+    padding: 0 !important;
     background: white !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
@@ -281,16 +322,37 @@ export function BarcodePanel() {
   }
   #barcode-print-area > p { display: none !important; }
   #barcode-print-area .barcode-print-label {
+    width: ${wMm}mm !important;
+    height: ${hMm}mm !important;
+    min-height: ${hMm}mm !important;
+    max-height: ${hMm}mm !important;
+    box-sizing: border-box !important;
+    padding: 1.5mm !important;
+    margin: 0 !important;
+    gap: 0.35mm !important;
+    overflow: hidden !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
     page-break-after: always !important;
     break-after: page !important;
+    border: 0 !important;
   }
   #barcode-print-area .barcode-print-label:last-child {
     page-break-after: auto !important;
     break-after: auto !important;
   }
-  #barcode-print-area canvas {
-    max-width: 100% !important;
+  #barcode-print-area .barcode-print-label p {
+    margin: 0 !important;
+    line-height: 1.05 !important;
+  }
+  #barcode-print-area .barcode-print-label canvas {
+    display: block !important;
+    margin: 0 auto !important;
+    max-width: calc(${wMm}mm - 3mm) !important;
+    max-height: ${printBarcodeMaxHeightMm}mm !important;
+    width: auto !important;
     height: auto !important;
+    object-fit: contain !important;
   }
 }
 `,
@@ -340,6 +402,25 @@ export function BarcodePanel() {
             <option value="CODE128">CODE128 (권장)</option>
             <option value="CODE39">CODE39</option>
           </select>
+        </div>
+        <div>
+          <label className="block text-sm text-slate-600 mb-1">라벨 용지 (가로×세로 mm)</label>
+          <select
+            value={paperKey}
+            onChange={e => setPaperKey(e.target.value)}
+            className="rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white min-w-[200px]"
+          >
+            {LABEL_PRESETS.map(p => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500 mt-1 max-w-md leading-relaxed">
+            인쇄 창의 <strong className="text-slate-700">용지 크기</strong>를 여기와 같게 맞추면(예: {wMm}×{hMm}
+            mm) 레이아웃이 용지에 맞습니다. <strong className="text-slate-700">배율 100%</strong>, &quot;페이지에 맞춤&quot;은 끄는 것이
+            좋습니다.
+          </p>
         </div>
       </div>
 
@@ -460,6 +541,7 @@ export function BarcodePanel() {
                   payload={manualPayload}
                   format={format}
                   showEncodingLine={false}
+                  paperHeightMm={hMm}
                 />
               ) : (
                 <span className="text-slate-400 text-sm">값을 입력하면 미리보기가 나옵니다.</span>
@@ -488,6 +570,7 @@ export function BarcodePanel() {
                       serial ? `Serial: ${serial}` : '',
                     ].filter(Boolean)}
                     showEncodingLine={false}
+                    paperHeightMm={hMm}
                   />
                 ))
               )}
@@ -518,8 +601,7 @@ export function BarcodePanel() {
         </button>
       </div>
       <p className="text-xs text-slate-500 text-center">
-        인쇄 시 Windows/맥 인쇄 창에서 <strong className="text-slate-600">라벨 프린터·복합기</strong>와 용지/방향을 선택하면
-        됩니다.
+        용지 크기는 위에서 고른 mm와 인쇄기 설정이 같아야 합니다. 미리보기와 다르면 프린터 속성의 사용자 정의 용지를 확인하세요.
       </p>
     </div>
   )
