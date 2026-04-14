@@ -13,6 +13,64 @@ const UPSCALE_MAX = 2.5
 const PHOTO_UPSCALE_MAX = 3
 const DECODE_INTERVAL_MS = 72
 
+function decodeVideoFrame(
+  reader: BrowserMultiFormatReader,
+  videoEl: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  frameIndex: number,
+): string | null {
+  const vw = videoEl.videoWidth
+  const vh = videoEl.videoHeight
+  if (!vw || !vh) return null
+
+  const scale = computeDecodeScale(vw, vh, UPSCALE_MAX)
+  const drawAndDecode = (sx: number, sy: number, sw: number, sh: number, threshold?: number) => {
+    canvas.width = Math.round(sw * scale)
+    canvas.height = Math.round(sh * scale)
+    ctx.imageSmoothingEnabled = false
+    if (typeof threshold === 'number') {
+      drawBinarized(ctx, videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height, threshold)
+    } else {
+      ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
+    }
+    return tryDecodeCanvas(reader, canvas)
+  }
+
+  const full = () => drawAndDecode(0, 0, vw, vh)
+  const fullBW = (t: number) => drawAndDecode(0, 0, vw, vh, t)
+  const centerSquare = () => {
+    const size = Math.min(vw, vh) * 0.66
+    const sx = (vw - size) / 2
+    const sy = (vh - size) / 2
+    return drawAndDecode(sx, sy, size, size)
+  }
+  const centerWideBand = (bw: number) => {
+    const sw = vw * 0.9
+    const sh = vh * bw
+    const sx = (vw - sw) / 2
+    const sy = (vh - sh) / 2
+    return drawAndDecode(sx, sy, sw, sh)
+  }
+
+  const attempts: Array<() => string | null> = [
+    full,
+    () => fullBW(128),
+    () => centerWideBand(0.32),
+    centerSquare,
+    () => fullBW(112),
+    () => fullBW(144),
+    () => centerWideBand(0.45),
+  ]
+
+  const offset = frameIndex % attempts.length
+  for (let i = 0; i < attempts.length; i++) {
+    const decoded = attempts[(offset + i) % attempts.length]()
+    if (decoded) return decoded
+  }
+  return null
+}
+
 function computeDecodeScale(w: number, h: number, maxScale = UPSCALE_MAX): number {
   const m = Math.max(w, h)
   if (m <= 0) return 1.5
@@ -298,41 +356,11 @@ export function BarcodeCamera({
       ]
 
       const startCanvasLoop = () => {
-        let frameToggle = false
+        let frameIndex = 0
         decodeTimer = setInterval(() => {
           if (cancelled || !stream) return
-          const vw = videoEl.videoWidth
-          const vh = videoEl.videoHeight
-          if (!vw || !vh) return
-
-          frameToggle = !frameToggle
-          const scale = computeDecodeScale(vw, vh, UPSCALE_MAX)
-          canvas.width = Math.round(vw * scale)
-          canvas.height = Math.round(vh * scale)
-          ctx.imageSmoothingEnabled = false
-
-          if (frameToggle) {
-            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
-          } else {
-            const cx = vw * 0.225
-            const cy = vh * 0.225
-            const cw = vw * 0.55
-            const ch = vh * 0.55
-            ctx.drawImage(videoEl, cx, cy, cw, ch, 0, 0, canvas.width, canvas.height)
-          }
-
-          try {
-            const result = reader.decodeFromCanvas(canvas)
-            onResult(result)
-          } catch {
-            try {
-              drawBinarized(ctx, videoEl, 0, 0, vw, vh, 0, 0, canvas.width, canvas.height, 128)
-              const result = reader.decodeFromCanvas(canvas)
-              onResult(result)
-            } catch {
-              /* */
-            }
-          }
+          const decoded = decodeVideoFrame(reader, videoEl, canvas, ctx, frameIndex++)
+          if (decoded) onResult({ getText: () => decoded } as Result)
         }, DECODE_INTERVAL_MS)
       }
 
