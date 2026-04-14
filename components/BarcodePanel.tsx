@@ -20,6 +20,8 @@ const LABEL_PRESETS: LabelPreset[] = [
   { key: '50x30', label: '50 x 30mm', widthMm: 50, heightMm: 30 },
   { key: '50.8x101.6', label: '2 x 4in (50.8 x 101.6mm)', widthMm: 50.8, heightMm: 101.6 },
   { key: '58x40', label: '58 x 40mm (기본)', widthMm: 58, heightMm: 40 },
+  /** XP-DT427B 등 USB 열전사: iframe print()가 빈 출력·무응답인 경우가 많아 전용 경로(새 창) 사용 */
+  { key: 'dt427b', label: 'XPrinter DT427B (58×40 열전사)', widthMm: 58, heightMm: 40 },
   { key: '70x50', label: '70 x 50mm', widthMm: 70, heightMm: 50 },
   { key: '100x60', label: '100 x 60mm (USER)', widthMm: 100, heightMm: 60 },
   { key: '101.6x101.6', label: '4 x 4in (101.6 x 101.6mm)', widthMm: 101.6, heightMm: 101.6 },
@@ -42,6 +44,113 @@ function escapeHtml(input: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+function buildBarcodePrintDocumentHtml(htmlLabels: string, paperPreset: LabelPreset, thermalDriver: boolean): string {
+  const w = paperPreset.widthMm
+  const h = paperPreset.heightMm
+  const thermalExtra = thermalDriver
+    ? `
+      /* 열전사(203dpi 계열): 바코드 PNG 선명도 */
+      .barcode { image-rendering: pixelated; }
+      html, body, .label { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    `
+    : ''
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Barcode Print</title>
+    <style>
+      @page { size: ${w}mm ${h}mm; margin: 0; }
+      html, body { margin: 0; padding: 0; background: #fff; }
+      .label {
+        width: ${w}mm;
+        height: ${h}mm;
+        box-sizing: border-box;
+        padding: 1mm;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6mm;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+      }
+      .label:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .caption {
+        margin: 0;
+        font-size: 7pt;
+        line-height: 1.1;
+        text-align: center;
+        max-width: 100%;
+      }
+      .meta {
+        margin: 0;
+        font-size: 6.2pt;
+        line-height: 1.1;
+        text-align: center;
+        max-width: 100%;
+        word-break: break-all;
+      }
+      .barcode {
+        width: 96%;
+        height: auto;
+        max-height: ${Math.max(12, h - 14)}mm;
+      }
+      ${thermalExtra}
+    </style>
+  </head>
+  <body>${htmlLabels}</body>
+</html>`
+}
+
+function printHtmlInNewWindow(docHtml: string) {
+  const w = window.open('', '_blank', 'noopener,noreferrer')
+  if (!w) {
+    window.alert(
+      'XPrinter DT427B 인쇄는 새 창이 필요합니다. 브라우저에서 이 사이트의 팝업을 허용한 뒤 다시「바로 인쇄」를 눌러 주세요.'
+    )
+    return
+  }
+  w.document.open()
+  w.document.write(docHtml)
+  w.document.close()
+
+  const finalize = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          w.focus()
+          w.print()
+        } finally {
+          setTimeout(() => w.close(), 800)
+        }
+      })
+    })
+  }
+
+  const imgs = Array.from(w.document.images)
+  if (imgs.length === 0) {
+    setTimeout(finalize, 150)
+    return
+  }
+  let pending = imgs.length
+  const onDone = () => {
+    pending -= 1
+    if (pending <= 0) setTimeout(finalize, 120)
+  }
+  imgs.forEach(img => {
+    if (img.complete) onDone()
+    else {
+      img.addEventListener('load', onDone, { once: true })
+      img.addEventListener('error', onDone, { once: true })
+    }
+  })
 }
 
 function BarcodeStrip({
@@ -338,6 +447,14 @@ export function BarcodePanel() {
 
     if (!htmlLabels) return
 
+    const useThermalWindow = paperKey === 'dt427b'
+    const docHtml = buildBarcodePrintDocumentHtml(htmlLabels, paperPreset, useThermalWindow)
+
+    if (useThermalWindow) {
+      printHtmlInNewWindow(docHtml)
+      return
+    }
+
     const iframe = document.createElement('iframe')
     // 0×0 iframe은 Chromium에서 인쇄 미리보기가 비거나 print()가 동작하지 않는 경우가 많음.
     // 레이아웃·인쇄 엔진이 문서 크기를 알 수 있도록 화면 밖에 실제 픽셀 크기를 둔다.
@@ -363,56 +480,7 @@ export function BarcodePanel() {
     }
 
     frameDoc.open()
-    frameDoc.write(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Barcode Print</title>
-    <style>
-      @page { size: ${paperPreset.widthMm}mm ${paperPreset.heightMm}mm; margin: 0; }
-      html, body { margin: 0; padding: 0; background: #fff; }
-      .label {
-        width: ${paperPreset.widthMm}mm;
-        height: ${paperPreset.heightMm}mm;
-        box-sizing: border-box;
-        padding: 1mm;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.6mm;
-        overflow: hidden;
-        page-break-after: always;
-        break-after: page;
-      }
-      .label:last-child {
-        page-break-after: auto;
-        break-after: auto;
-      }
-      .caption {
-        margin: 0;
-        font-size: 7pt;
-        line-height: 1.1;
-        text-align: center;
-        max-width: 100%;
-      }
-      .meta {
-        margin: 0;
-        font-size: 6.2pt;
-        line-height: 1.1;
-        text-align: center;
-        max-width: 100%;
-        word-break: break-all;
-      }
-      .barcode {
-        width: 96%;
-        height: auto;
-        max-height: ${Math.max(12, paperPreset.heightMm - 14)}mm;
-      }
-    </style>
-  </head>
-  <body>${htmlLabels}</body>
-</html>`)
+    frameDoc.write(docHtml)
     frameDoc.close()
 
     const finalize = () => {
@@ -559,7 +627,15 @@ export function BarcodePanel() {
             ))}
           </select>
         </div>
-        <p className="text-xs text-slate-500">미리보기는 크게, 실제 인쇄는 선택 용지 크기에 맞춰 출력됩니다.</p>
+        <p className="text-xs text-slate-500">
+          미리보기는 크게, 실제 인쇄는 선택 용지 크기에 맞춰 출력됩니다.
+          {paperKey === 'dt427b' && (
+            <>
+              {' '}
+              <strong className="text-slate-700">DT427B</strong>는 USB 열전사 드라이버와 맞추기 위해 새 창에서 인쇄합니다. 팝업이 차단되면 주소창에서 이 사이트의 팝업을 허용해 주세요.
+            </>
+          )}
+        </p>
       </div>
 
       {mode === 'items' ? (
