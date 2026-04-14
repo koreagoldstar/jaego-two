@@ -34,9 +34,12 @@ const LABEL_PRESETS: LabelPreset[] = [
 ]
 
 /** 본문(캡션·메타)에 쓸 여백을 최소화해 바코드 영역을 최대화 */
-function labelBarcodeMaxHeightMm(heightMm: number): number {
+function labelBarcodeMaxHeightMm(heightMm: number, textMode: 'normal' | 'compact' = 'normal'): number {
   const pad = 1.2
-  const textReserve = Math.min(10, heightMm * 0.26)
+  const textReserve =
+    textMode === 'compact'
+      ? Math.min(1.2, heightMm * 0.06)
+      : Math.min(10, heightMm * 0.26)
   return Math.max(5, heightMm - textReserve - pad * 2)
 }
 
@@ -490,12 +493,17 @@ export function BarcodePanel() {
    * 인쇄 iframe 전용 — 1D: 203dpi·쿼트존·선명 축소. QR: 슬롯에 맞는 정사각 고해상도.
    */
   const drawToDataUrlForPrint = useCallback(
-    async (payload: string, labelWidthMm: number, labelHeightMm: number): Promise<string | null> => {
+    async (
+      payload: string,
+      labelWidthMm: number,
+      labelHeightMm: number,
+      textMode: 'normal' | 'compact' = 'normal'
+    ): Promise<string | null> => {
       const clean = normalizeBarcodePayload(payload)
       if (!clean) return null
 
       const padMm = 1.2
-      const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm)
+      const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm, textMode)
       const maxWPx = Math.max(64, Math.round((labelWidthMm - padMm * 2) * DPMM_203))
       const maxHPx = Math.max(40, Math.round(barcodeMaxMm * DPMM_203))
 
@@ -504,7 +512,7 @@ export function BarcodePanel() {
         try {
           return await QRCode.toDataURL(clean, {
             width: side,
-            margin: 2,
+            margin: textMode === 'compact' ? 1 : 2,
             errorCorrectionLevel: 'H',
             color: { dark: '#000000', light: '#ffffff' },
           })
@@ -610,12 +618,16 @@ export function BarcodePanel() {
   )
   const wMm = paperPreset.widthMm
   const hMm = paperPreset.heightMm
-  const printBarcodeMaxHeightMm = useMemo(() => labelBarcodeMaxHeightMm(hMm), [hMm])
+  const printBarcodeMaxHeightMm = useMemo(
+    () => labelBarcodeMaxHeightMm(hMm, hMm <= 24 ? 'compact' : 'normal'),
+    [hMm]
+  )
 
   async function printBarcode() {
     if (mode === 'manual' && !manualPayload) return
     if (mode === 'items' && validItemRows.length === 0) return
 
+    const compactPrint = hMm <= 24
     const labels =
       mode === 'manual'
         ? [
@@ -626,17 +638,19 @@ export function BarcodePanel() {
             },
           ]
         : validItemRows.map(({ item, payload, unitIndex, serial }) => ({
-            caption: `${item.name} #${unitIndex}`,
-            metaLines: [
-              item.sh ? `SH: ${item.quantity > 1 ? `${item.sh}-${String(unitIndex).padStart(3, '0')}` : item.sh}` : '',
-              serial ? `Serial: ${serial}` : '',
-            ].filter(Boolean),
+            caption: compactPrint ? '' : `${item.name} #${unitIndex}`,
+            metaLines: compactPrint
+              ? []
+              : [
+                  item.sh ? `SH: ${item.quantity > 1 ? `${item.sh}-${String(unitIndex).padStart(3, '0')}` : item.sh}` : '',
+                  serial ? `Serial: ${serial}` : '',
+                ].filter(Boolean),
             payload,
           }))
 
     const parts: string[] = []
     for (const label of labels) {
-      const dataUrl = await drawToDataUrlForPrint(label.payload, wMm, hMm)
+      const dataUrl = await drawToDataUrlForPrint(label.payload, wMm, hMm, compactPrint ? 'compact' : 'normal')
       if (!dataUrl) continue
       const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
       const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
