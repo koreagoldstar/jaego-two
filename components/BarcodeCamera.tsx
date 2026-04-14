@@ -5,6 +5,26 @@ import { BrowserMultiFormatReader, BrowserCodeReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType, type Result } from '@zxing/library'
 import { Loader2 } from 'lucide-react'
 
+/** 업스케일 캔버스 한 변 최대(px). 작은 인쇄물 인식을 위해 프레임을 확대해 디코딩한다. */
+const UPSCALE_CANVAS_MAX = 2560
+const UPSCALE_MIN = 1.5
+const UPSCALE_MAX = 2.5
+/** 캔버스 디코딩 시도 간격(ms). 너무 짧으면 CPU 부담 */
+const DECODE_INTERVAL_MS = 90
+
+function computeDecodeScale(videoWidth: number, videoHeight: number): number {
+  const m = Math.max(videoWidth, videoHeight)
+  if (m <= 0) return 1.5
+  let scale = Math.min(UPSCALE_MAX, UPSCALE_CANVAS_MAX / m)
+  scale = Math.max(scale, UPSCALE_MIN)
+  const tw = videoWidth * scale
+  const th = videoHeight * scale
+  if (tw > UPSCALE_CANVAS_MAX || th > UPSCALE_CANVAS_MAX) {
+    scale = UPSCALE_CANVAS_MAX / m
+  }
+  return scale
+}
+
 type Props = {
   /** 카메라가 읽은 원문 (중복·쿨다운은 내부 처리) */
   onDecode: (text: string) => void | Promise<void>
@@ -56,19 +76,22 @@ export function BarcodeCamera({
       tryPlayVideoTimeout: 12_000,
     })
     let cancelled = false
-    let controls: { stop: () => void } | undefined
     let attachedVideo: HTMLVideoElement | null = null
+    let stream: MediaStream | null = null
+    let decodeTimer: ReturnType<typeof setInterval> | undefined
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
 
     const pickBackDeviceId = async () => {
       let envDeviceId: string | undefined
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const s = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' } },
           audio: false,
         })
-        const track = stream.getVideoTracks()[0]
+        const track = s.getVideoTracks()[0]
         envDeviceId = track?.getSettings().deviceId
-        stream.getTracks().forEach(t => t.stop())
+        s.getTracks().forEach(t => t.stop())
       } catch {
         /* fallback below */
       }
@@ -89,14 +112,21 @@ export function BarcodeCamera({
       return scored[0]?.id
     }
 
+    const tryPlayVideoWithTimeout = (videoEl: HTMLVideoElement) =>
+      Promise.race([
+        BrowserCodeReader.tryPlayVideo(videoEl),
+        new Promise<boolean>((_, reject) =>
+          setTimeout(() => reject(new Error('tryPlayVideo timeout')), 12_000),
+        ),
+      ])
+
     const startDecode = async () => {
       const videoEl = videoRef.current
-      if (!videoEl || cancelled) return
+      if (!videoEl || cancelled || !ctx) return
       attachedVideo = videoEl
 
       const onResult = (result: Result | undefined) => {
         if (cancelled) return
-        /* 연속 스캔은 실패 프레임마다 NotFound 등이 올 수 있음 — 성공 시에만 result 가 있다 */
         if (!result) return
         const text = result.getText().trim()
         if (!text) return
@@ -111,9 +141,17 @@ export function BarcodeCamera({
         {
           video: {
             facingMode: { ideal: 'environment' },
-            width: { ideal: 1920, min: 480 },
-            height: { ideal: 1080, min: 360 },
+            width: { ideal: 1920, min: 720 },
+            height: { ideal: 1080, min: 540 },
             frameRate: { ideal: 30, max: 30 },
+          },
+          audio: false,
+        },
+        {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
           },
           audio: false,
         },
@@ -128,38 +166,92 @@ export function BarcodeCamera({
         { video: { facingMode: 'environment' }, audio: false },
       ]
 
+      const startCanvasLoop = () => {
+        let frameToggle = false
+        decodeTimer = setInterval(() => {
+          if (cancelled || !stream) return
+          const vw = videoEl.videoWidth
+          const vh = videoEl.videoHeight
+          if (!vw || !vh) return
+
+          frameToggle = !frameToggle
+          const scale = computeDecodeScale(vw, vh)
+          canvas.width = Math.round(vw * scale)
+          canvas.height = Math.round(vh * scale)
+          ctx.imageSmoothingEnabled = false
+
+          if (frameToggle) {
+            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height)
+          } else {
+            /* 화면 중앙에 작은 라벨을 두는 경우가 많아, 화면 중앙 55%만 잘라 확대해 디코딩 */
+            const cx = vw * 0.225
+            const cy = vh * 0.225
+            const cw = vw * 0.55
+            const ch = vh * 0.55
+            ctx.drawImage(videoEl, cx, cy, cw, ch, 0, 0, canvas.width, canvas.height)
+          }
+
+          try {
+            const result = reader.decodeFromCanvas(canvas)
+            onResult(result)
+          } catch {
+            /* NotFound 등 */
+          }
+        }, DECODE_INTERVAL_MS)
+      }
+
       for (const constraints of constraintAttempts) {
         try {
-          controls = await reader.decodeFromConstraints(constraints, videoEl, (result, error, c) => {
-            void error
-            void c
-            onResult(result)
-          })
-          setStatus('바코드·QR을 비추세요')
-          return
+          stream = await navigator.mediaDevices.getUserMedia(constraints)
+          break
         } catch {
-          /* try next constraints */
+          stream = null
         }
       }
 
-      try {
-        const back = await pickBackDeviceId()
-        controls = await reader.decodeFromVideoDevice(back, videoEl, (result, error, c) => {
-          void error
-          void c
-          onResult(result)
-        })
-        setStatus('바코드·QR을 비추세요')
-      } catch {
-        setStatus('카메라를 사용할 수 없습니다. 권한·HTTPS를 확인하세요.')
+      if (!stream) {
+        try {
+          const back = await pickBackDeviceId()
+          if (!back) throw new Error('no device')
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              deviceId: { exact: back },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
+            audio: false,
+          })
+        } catch {
+          setStatus('카메라를 사용할 수 없습니다. 권한·HTTPS를 확인하세요.')
+          return
+        }
       }
+
+      BrowserCodeReader.addVideoSource(videoEl, stream)
+      try {
+        await tryPlayVideoWithTimeout(videoEl)
+      } catch {
+        setStatus('카메라 영상을 시작하지 못했습니다.')
+        stream.getTracks().forEach(t => t.stop())
+        stream = null
+        BrowserCodeReader.cleanVideoSource(videoEl)
+        return
+      }
+
+      setStatus('작은 라벨은 가까이 비추세요 · 초점이 맞도록')
+
+      startCanvasLoop()
     }
 
     void startDecode()
 
     return () => {
       cancelled = true
-      controls?.stop()
+      if (decodeTimer !== undefined) clearInterval(decodeTimer)
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop())
+        stream = null
+      }
       if (attachedVideo) BrowserCodeReader.cleanVideoSource(attachedVideo)
     }
   }, [])
