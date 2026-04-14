@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader, BrowserCodeReader } from '@zxing/browser'
-import { BarcodeFormat, DecodeHintType, type Exception, type Result } from '@zxing/library'
+import { BarcodeFormat, DecodeHintType, type Result } from '@zxing/library'
 import { Loader2 } from 'lucide-react'
 
 type Props = {
@@ -94,7 +94,7 @@ export function BarcodeCamera({
       if (!videoEl || cancelled) return
       attachedVideo = videoEl
 
-      const onResult = (result: Result | undefined, _err: Exception | undefined) => {
+      const onResult = (result: Result | undefined) => {
         if (cancelled) return
         /* 연속 스캔은 실패 프레임마다 NotFound 등이 올 수 있음 — 성공 시에만 result 가 있다 */
         if (!result) return
@@ -130,8 +130,10 @@ export function BarcodeCamera({
 
       for (const constraints of constraintAttempts) {
         try {
-          controls = await reader.decodeFromConstraints(constraints, videoEl, (result, error, _c) => {
-            onResult(result, error)
+          controls = await reader.decodeFromConstraints(constraints, videoEl, (result, error, c) => {
+            void error
+            void c
+            onResult(result)
           })
           setStatus('바코드·QR을 비추세요')
           return
@@ -142,8 +144,10 @@ export function BarcodeCamera({
 
       try {
         const back = await pickBackDeviceId()
-        controls = await reader.decodeFromVideoDevice(back, videoEl, (result, error, _c) => {
-          onResult(result, error)
+        controls = await reader.decodeFromVideoDevice(back, videoEl, (result, error, c) => {
+          void error
+          void c
+          onResult(result)
         })
         setStatus('바코드·QR을 비추세요')
       } catch {
