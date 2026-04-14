@@ -186,9 +186,13 @@ export function MoveStockClient() {
             </button>
           </div>
         </div>
+      ) : items.length === 0 ? (
+        <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/80 p-6 text-center text-sm text-slate-600">
+          등록된 품목이 없습니다. 재고 메뉴에서 품목을 먼저 등록한 뒤 다시 오세요.
+        </div>
       ) : (
         <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/80 p-6 text-center text-sm text-slate-600">
-          아직 품목이 없습니다. 바코드를 스캔하세요.
+          바코드를 스캔하거나, 아래「직접 품목 고르기」에서 품목을 선택하세요.
         </div>
       )}
 
