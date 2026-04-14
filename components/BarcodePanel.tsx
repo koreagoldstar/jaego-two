@@ -544,7 +544,8 @@ export function BarcodePanel() {
         }
       }
 
-      for (const moduleW of (format === 'CODE39' ? [4, 3, 2] : [3, 2]) as const) tryProbe(moduleW)
+      const moduleCandidates: Array<4 | 3 | 2> = format === 'CODE39' ? [4, 3, 2] : [3, 2]
+      for (const moduleW of moduleCandidates) tryProbe(moduleW)
       if (bestFit < 0) tryProbe(1)
       if (bestFit < 0) return null
 
