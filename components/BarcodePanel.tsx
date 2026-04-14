@@ -7,25 +7,8 @@ import type { Item } from '@/lib/supabase/types'
 import { buildItemLabelVariants } from '@/lib/items/labelVariants'
 import { Loader2, Package, PencilLine, Printer } from 'lucide-react'
 
-type LabelPreset = {
-  key: string
-  label: string
-  widthMm: number
-  heightMm: number
-}
-
-const LABEL_PRESETS: LabelPreset[] = [
-  { key: '40x20', label: '40 x 20mm', widthMm: 40, heightMm: 20 },
-  { key: '40x30', label: '40 x 30mm', widthMm: 40, heightMm: 30 },
-  { key: '50x30', label: '50 x 30mm', widthMm: 50, heightMm: 30 },
-  { key: '50.8x101.6', label: '2 x 4in (50.8 x 101.6mm)', widthMm: 50.8, heightMm: 101.6 },
-  { key: '58x40', label: '58 x 40mm (기본)', widthMm: 58, heightMm: 40 },
-  { key: '70x50', label: '70 x 50mm', widthMm: 70, heightMm: 50 },
-  { key: '100x60', label: '100 x 60mm (USER)', widthMm: 100, heightMm: 60 },
-  { key: '101.6x101.6', label: '4 x 4in (101.6 x 101.6mm)', widthMm: 101.6, heightMm: 101.6 },
-  { key: '101.6x152.4', label: '4 x 6in (101.6 x 152.4mm)', widthMm: 101.6, heightMm: 152.4 },
-  { key: '100x50', label: '100 x 50mm', widthMm: 100, heightMm: 50 },
-]
+/** 미리보기·바코드 줄 높이 계산용 (고정값 — 용지 mm 프리셋 없음) */
+const PREVIEW_LABEL_HEIGHT_MM = 40
 
 function getItemLabelRows(item: Item, sep: string) {
   return buildItemLabelVariants(item, sep).filter(row => row.payload)
@@ -35,157 +18,20 @@ function sanitizeFilePart(s: string): string {
   return s.slice(0, 48).replace(/[/\\?%*:|"<>]/g, '-').trim() || 'item'
 }
 
-function escapeHtml(input: string): string {
-  return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-/** 라벨 높이(mm)에서 본문·여백을 제외한 바코드 이미지 최대 높이 */
-function labelBarcodeMaxHeightMm(heightMm: number): number {
-  const pad = 1.5
-  const textReserve = Math.min(14, heightMm * 0.35)
-  return Math.max(6, heightMm - textReserve - pad * 2)
-}
-
-/** 열전사 203dpi 기준 mm→px (브라우저가 PNG를 물리 크기에 맞추기 쉽게) */
-const DPMM_203 = 203 / 25.4
-
-/** 브라우저·프린터가 @page 가로/세로를 뒤집는 경우를 줄이기 위해 orientation 키워드 명시 */
-function pageSizeRule(widthMm: number, heightMm: number): string {
-  if (widthMm >= heightMm) {
-    return `size: ${widthMm}mm ${heightMm}mm landscape;`
-  }
-  return `size: ${widthMm}mm ${heightMm}mm portrait;`
-}
-
-function scaleCanvasToMax(source: HTMLCanvasElement, maxWPx: number, maxHPx: number): HTMLCanvasElement {
-  const w = source.width
-  const h = source.height
-  if (w <= 0 || h <= 0) return source
-  const scale = Math.min(maxWPx / w, maxHPx / h, 1)
-  if (scale >= 0.999) return source
-  const out = document.createElement('canvas')
-  out.width = Math.max(1, Math.round(w * scale))
-  out.height = Math.max(1, Math.round(h * scale))
-  const ctx = out.getContext('2d')
-  if (!ctx) return source
-  ctx.imageSmoothingEnabled = true
-  ctx.drawImage(source, 0, 0, out.width, out.height)
-  return out
-}
-
-/** iframe 인쇄 문서용 — @page·html·body·라벨을 동일 mm로 고정, 인쇄 미리보기와 동일 규칙을 @media print에도 복제 */
-function buildPrintIframeStyles(widthMm: number, heightMm: number): string {
-  const pad = 1.5
-  const barcodeMaxMm = labelBarcodeMaxHeightMm(heightMm)
-  const innerW = `calc(${widthMm}mm - ${pad * 2}mm)`
-  return `
-      @page {
-        ${pageSizeRule(widthMm, heightMm)}
-        margin: 0 !important;
-      }
-      * {
-        box-sizing: border-box;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      html {
-        margin: 0;
-        padding: 0;
-        width: ${widthMm}mm;
-        height: ${heightMm}mm;
-        overflow: hidden;
-      }
-      body {
-        margin: 0 !important;
-        padding: 0 !important;
-        width: ${widthMm}mm;
-        height: ${heightMm}mm;
-        min-height: ${heightMm}mm;
-        max-height: ${heightMm}mm;
-        background: #fff;
-        overflow: hidden;
-      }
-      .label {
-        width: ${widthMm}mm;
-        height: ${heightMm}mm;
-        min-height: ${heightMm}mm;
-        max-height: ${heightMm}mm;
-        box-sizing: border-box;
-        padding: ${pad}mm;
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        justify-content: flex-start;
-        gap: 0.35mm;
-        overflow: hidden;
-        page-break-after: always;
-        break-after: page;
-      }
-      .label:last-child {
-        page-break-after: auto;
-        break-after: auto;
-      }
-      .caption {
-        margin: 0;
-        font-size: 6.5pt;
-        line-height: 1.05;
-        text-align: center;
-        max-width: 100%;
-        flex-shrink: 0;
-      }
-      .meta {
-        margin: 0;
-        font-size: 5.8pt;
-        line-height: 1.05;
-        text-align: center;
-        max-width: 100%;
-        word-break: break-all;
-        flex-shrink: 0;
-      }
-      .barcode {
-        display: block;
-        margin: 0 auto;
-        flex: 1 1 auto;
-        width: ${innerW};
-        max-width: ${innerW};
-        height: auto;
-        max-height: ${barcodeMaxMm}mm;
-        object-fit: contain;
-      }
-      @media print {
-        @page {
-          ${pageSizeRule(widthMm, heightMm)}
-          margin: 0 !important;
-        }
-        html, body {
-          width: ${widthMm}mm !important;
-          height: ${heightMm}mm !important;
-          overflow: hidden !important;
-        }
-      }
-  `
-}
-
 function BarcodeStrip({
   payload,
   format,
   caption,
   metaLines = [],
   showEncodingLine = true,
-  paperHeightMm,
+  paperHeightMm = PREVIEW_LABEL_HEIGHT_MM,
 }: {
   payload: string
   format: 'CODE128' | 'CODE39'
   caption?: string
   metaLines?: string[]
   showEncodingLine?: boolean
-  paperHeightMm: number
+  paperHeightMm?: number
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const compactLabel = paperHeightMm <= 24
@@ -218,7 +64,6 @@ function BarcodeStrip({
     <div
       className="barcode-print-label flex flex-col items-center justify-center gap-1 border-b border-slate-100 last:border-0 print:break-inside-avoid"
       style={{
-        // Screen preview stays large/readable; print CSS enforces actual label size.
         width: '100%',
         minHeight: '180px',
         padding: '10px',
@@ -257,9 +102,6 @@ export function BarcodePanel() {
   const [serial, setSerial] = useState('')
   const [sep, setSep] = useState('|')
   const [format, setFormat] = useState<'CODE128' | 'CODE39'>('CODE128')
-  const [paperKey, setPaperKey] = useState<string>('58x40')
-  /** 드롭다운 가로×세로와 실제 롤·드라이버 방향이 다를 때만 뒤집기 (기본은 프리셋 순서 그대로) */
-  const [swapPrintAxes, setSwapPrintAxes] = useState(false)
 
   const [items, setItems] = useState<Item[]>([])
   const [itemsLoading, setItemsLoading] = useState(true)
@@ -375,32 +217,6 @@ export function BarcodePanel() {
     [format]
   )
 
-  /** 인쇄 iframe용: 203dpi에 맞춘 픽셀 크기로 바코드를 그린 뒤 mm 레이아웃과 맞춤 */
-  const drawToDataUrlForPrint = useCallback(
-    (payload: string, labelWidthMm: number, labelHeightMm: number): string | null => {
-      const padMm = 1.5
-      const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm)
-      const maxWPx = Math.max(48, Math.round((labelWidthMm - padMm * 2) * DPMM_203))
-      const maxHPx = Math.max(32, Math.round(barcodeMaxMm * DPMM_203))
-      const canvas = document.createElement('canvas')
-      try {
-        const barHeight = Math.min(160, Math.max(48, Math.floor(maxHPx * 0.88)))
-        JsBarcode(canvas, payload, {
-          format,
-          width: 2,
-          height: barHeight,
-          displayValue: false,
-          margin: Math.max(2, Math.round(4 * (DPMM_203 / 8))),
-        })
-        const scaled = scaleCanvasToMax(canvas, maxWPx, maxHPx)
-        return scaled.toDataURL('image/png')
-      } catch {
-        return null
-      }
-    },
-    [format]
-  )
-
   const triggerDownload = (blob: Blob, filename: string) => {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -427,130 +243,15 @@ export function BarcodePanel() {
     }
   }
 
-  const paperPreset = useMemo(
-    () => LABEL_PRESETS.find(p => p.key === paperKey) ?? LABEL_PRESETS[0],
-    [paperKey]
-  )
-  const printDims = useMemo(() => {
-    if (swapPrintAxes) {
-      return { widthMm: paperPreset.heightMm, heightMm: paperPreset.widthMm }
-    }
-    return { widthMm: paperPreset.widthMm, heightMm: paperPreset.heightMm }
-  }, [paperPreset.heightMm, paperPreset.widthMm, swapPrintAxes])
-  const printBarcodeMaxHeightMm = useMemo(
-    () => labelBarcodeMaxHeightMm(printDims.heightMm),
-    [printDims.heightMm]
-  )
   const canPrint = mode === 'manual' ? !!manualPayload : validItemRows.length > 0
   const canDownload = canPrint
 
+  /** 최초 바코드 인쇄와 동일: 시스템 인쇄 대화상자만 띄움 (iframe·용지 mm 없음) */
   function printBarcode() {
     if (mode === 'manual' && !manualPayload) return
     if (mode === 'items' && validItemRows.length === 0) return
-
-    const labels =
-      mode === 'manual'
-        ? [
-            {
-              caption: '',
-              metaLines: [] as string[],
-              payload: manualPayload,
-            },
-          ]
-        : validItemRows.map(({ item, payload, unitIndex, serial }) => ({
-            caption: `${item.name} #${unitIndex}`,
-            metaLines: [
-              item.sh ? `SH: ${item.quantity > 1 ? `${item.sh}-${String(unitIndex).padStart(3, '0')}` : item.sh}` : '',
-              serial ? `Serial: ${serial}` : '',
-            ].filter(Boolean),
-            payload,
-          }))
-
-    const wMm = printDims.widthMm
-    const hMm = printDims.heightMm
-
-    const htmlLabels = labels
-      .map(label => {
-        const barcodeDataUrl = drawToDataUrlForPrint(label.payload, wMm, hMm)
-        if (!barcodeDataUrl) return ''
-        const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
-        const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
-        return `
-          <section class="label">
-            ${captionHtml}
-            ${metaHtml}
-            <img class="barcode" src="${barcodeDataUrl}" alt="barcode" />
-          </section>
-        `
-      })
-      .filter(Boolean)
-      .join('')
-
-    if (!htmlLabels) return
-
-    const iframe = document.createElement('iframe')
-    // 0×0 iframe은 Chromium에서 인쇄 미리보기가 비거나 print()가 동작하지 않는 경우가 많음.
-    // 레이아웃·인쇄 엔진이 문서 크기를 알 수 있도록 화면 밖에 실제 픽셀 크기를 둔다.
-    iframe.setAttribute('aria-hidden', 'true')
-    Object.assign(iframe.style, {
-      position: 'fixed',
-      left: '-10000px',
-      top: '0',
-      width: `${Math.max(320, Math.ceil(wMm * 4))}px`,
-      height: `${Math.max(400, Math.ceil(hMm * 4 * Math.max(1, labels.length)))}px`,
-      border: '0',
-      opacity: '0',
-      pointerEvents: 'none',
-      zIndex: '-1',
-    })
-    document.body.appendChild(iframe)
-
-    const frameDoc = iframe.contentDocument
-    const frameWin = iframe.contentWindow
-    if (!frameDoc || !frameWin) {
-      iframe.remove()
-      return
-    }
-
-    frameDoc.open()
-    frameDoc.write(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Barcode Print</title>
-    <style>${buildPrintIframeStyles(wMm, hMm)}</style>
-  </head>
-  <body>${htmlLabels}</body>
-</html>`)
-    frameDoc.close()
-
-    const finalize = () => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          frameWin.focus()
-          frameWin.print()
-          setTimeout(() => iframe.remove(), 1500)
-        })
-      })
-    }
-
-    const images = Array.from(frameDoc.images)
-    if (images.length === 0) {
-      setTimeout(finalize, 100)
-      return
-    }
-
-    let pending = images.length
-    const onDone = () => {
-      pending -= 1
-      if (pending <= 0) setTimeout(finalize, 100)
-    }
-    images.forEach(img => {
-      if (img.complete) onDone()
-      else {
-        img.addEventListener('load', onDone, { once: true })
-        img.addEventListener('error', onDone, { once: true })
-      }
+    requestAnimationFrame(() => {
+      window.print()
     })
   }
 
@@ -560,63 +261,36 @@ export function BarcodePanel() {
         dangerouslySetInnerHTML={{
           __html: `
 @media print {
-  @page { margin: 0 !important; ${pageSizeRule(printDims.widthMm, printDims.heightMm)} }
-  html, body {
-    width: ${printDims.widthMm}mm !important;
-    min-height: ${printDims.heightMm}mm !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
+  @page { margin: 10mm; size: auto; }
   body * { visibility: hidden !important; }
   #barcode-print-area, #barcode-print-area * { visibility: visible !important; }
   #barcode-print-area {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    width: ${printDims.widthMm}mm !important;
-    min-height: ${printDims.heightMm}mm !important;
+    width: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
     justify-content: flex-start !important;
-    padding: 0 !important;
+    padding: 8mm !important;
     background: white !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     box-sizing: border-box !important;
   }
+  #barcode-print-area > p { display: none !important; }
   #barcode-print-area .barcode-print-label {
-    width: ${printDims.widthMm}mm !important;
-    height: ${printDims.heightMm}mm !important;
-    min-height: ${printDims.heightMm}mm !important;
-    max-height: ${printDims.heightMm}mm !important;
-    padding: 1.5mm !important;
-    gap: 0.35mm !important;
-    box-sizing: border-box !important;
-    overflow: hidden !important;
     page-break-after: always !important;
     break-after: page !important;
-    border: 0 !important;
-  }
-  #barcode-print-area > p {
-    display: none !important;
   }
   #barcode-print-area .barcode-print-label:last-child {
     page-break-after: auto !important;
     break-after: auto !important;
   }
-  #barcode-print-area .barcode-print-label p {
-    margin: 0 !important;
-    line-height: 1.05 !important;
-  }
   #barcode-print-area canvas {
-    display: block !important;
-    margin: 0 auto !important;
-    width: auto !important;
+    max-width: 100% !important;
     height: auto !important;
-    max-width: calc(${printDims.widthMm}mm - 3mm) !important;
-    max-height: ${printBarcodeMaxHeightMm}mm !important;
-    object-fit: contain !important;
   }
 }
 `,
@@ -666,37 +340,6 @@ export function BarcodePanel() {
             <option value="CODE128">CODE128 (권장)</option>
             <option value="CODE39">CODE39</option>
           </select>
-        </div>
-        <div>
-          <label className="block text-sm text-slate-600 mb-1">라벨 용지 크기 (가로×세로 mm)</label>
-          <select
-            value={paperKey}
-            onChange={e => setPaperKey(e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
-          >
-            {LABEL_PRESETS.map(p => (
-              <option key={p.key} value={p.key}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <label className="mt-2 flex items-start gap-2 text-sm text-slate-700 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={swapPrintAxes}
-              onChange={e => setSwapPrintAxes(e.target.checked)}
-              className="mt-0.5 rounded border-slate-300 shrink-0"
-            />
-            <span>
-              가로·세로(mm) 뒤집기 — 인쇄가 90° 틀어지면 체크
-            </span>
-          </label>
-          <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-            실제 라벨과 같은 크기를 고르세요. 인쇄 창에서 <strong className="text-slate-700">용지</strong>{' '}
-            {printDims.widthMm}×{printDims.heightMm}mm, <strong className="text-slate-700">배율 100%</strong>,{' '}
-            <strong className="text-slate-700">방향: 가로(랜드스케이프)</strong>를 선택하세요. 위 옵션은 CSS에 가로/세로 방향을
-            명시해 두었습니다. 그래도 세로로만 나오면 위 체크를 켜 보거나, 프린터 속성의 용지 방향을 바꿔 보세요.
-          </p>
         </div>
       </div>
 
@@ -817,7 +460,6 @@ export function BarcodePanel() {
                   payload={manualPayload}
                   format={format}
                   showEncodingLine={false}
-                  paperHeightMm={printDims.heightMm}
                 />
               ) : (
                 <span className="text-slate-400 text-sm">값을 입력하면 미리보기가 나옵니다.</span>
@@ -846,7 +488,6 @@ export function BarcodePanel() {
                       serial ? `Serial: ${serial}` : '',
                     ].filter(Boolean)}
                     showEncodingLine={false}
-                    paperHeightMm={printDims.heightMm}
                   />
                 ))
               )}
@@ -877,7 +518,8 @@ export function BarcodePanel() {
         </button>
       </div>
       <p className="text-xs text-slate-500 text-center">
-        인쇄 미리보기에서 레이아웃이 어긋나면 Windows 프린터 속성의 용지(예: 58×40mm)와 위에서 고른 mm가 같은지 확인하세요.
+        인쇄 시 Windows/맥 인쇄 창에서 <strong className="text-slate-600">라벨 프린터·복합기</strong>와 용지/방향을 선택하면
+        됩니다.
       </p>
     </div>
   )
