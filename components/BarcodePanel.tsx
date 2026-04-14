@@ -20,8 +20,6 @@ const LABEL_PRESETS: LabelPreset[] = [
   { key: '50x30', label: '50 x 30mm', widthMm: 50, heightMm: 30 },
   { key: '50.8x101.6', label: '2 x 4in (50.8 x 101.6mm)', widthMm: 50.8, heightMm: 101.6 },
   { key: '58x40', label: '58 x 40mm (기본)', widthMm: 58, heightMm: 40 },
-  /** XP-DT427B 등 USB 열전사: iframe print()가 빈 출력·무응답인 경우가 많아 전용 경로(새 창) 사용 */
-  { key: 'dt427b', label: 'XPrinter DT427B (58×40 열전사)', widthMm: 58, heightMm: 40 },
   { key: '70x50', label: '70 x 50mm', widthMm: 70, heightMm: 50 },
   { key: '100x60', label: '100 x 60mm (USER)', widthMm: 100, heightMm: 60 },
   { key: '101.6x101.6', label: '4 x 4in (101.6 x 101.6mm)', widthMm: 101.6, heightMm: 101.6 },
@@ -44,248 +42,6 @@ function escapeHtml(input: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
-}
-
-function buildBarcodePrintDocumentHtml(htmlLabels: string, paperPreset: LabelPreset, thermalDriver: boolean): string {
-  const w = paperPreset.widthMm
-  const h = paperPreset.heightMm
-  const thermalExtra = thermalDriver
-    ? `
-      /* 열전사(203dpi 계열): 바코드 PNG 선명도 */
-      .barcode { image-rendering: pixelated; }
-      html, body, .label { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    `
-    : ''
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Barcode Print</title>
-    <style>
-      @page { size: ${w}mm ${h}mm; margin: 0; }
-      html, body { margin: 0; padding: 0; background: #fff; }
-      .label {
-        width: ${w}mm;
-        height: ${h}mm;
-        box-sizing: border-box;
-        padding: 1mm;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.6mm;
-        overflow: hidden;
-        page-break-after: always;
-        break-after: page;
-      }
-      .label:last-child {
-        page-break-after: auto;
-        break-after: auto;
-      }
-      .caption {
-        margin: 0;
-        font-size: 7pt;
-        line-height: 1.1;
-        text-align: center;
-        max-width: 100%;
-      }
-      .meta {
-        margin: 0;
-        font-size: 6.2pt;
-        line-height: 1.1;
-        text-align: center;
-        max-width: 100%;
-        word-break: break-all;
-      }
-      .barcode {
-        width: 96%;
-        height: auto;
-        max-height: ${Math.max(12, h - 14)}mm;
-      }
-      ${thermalExtra}
-    </style>
-  </head>
-  <body>${htmlLabels}</body>
-</html>`
-}
-
-/**
- * USB 열전사(Xprinter 등)는 iframe.print()보다 "일반 페이지"로 연 새 창에서 print()할 때 드라이버가 잡는 경우가 많음.
- * 모든 용지 프리셋에서 동일하게: 새 창 우선 → 실패 시 iframe.
- */
-function attachPrintLifecycle(w: Window, extraCleanup?: () => void) {
-  const cleanup = () => {
-    try {
-      extraCleanup?.()
-    } catch {
-      /* ignore */
-    }
-    try {
-      if (!w.closed) w.close()
-    } catch {
-      /* ignore */
-    }
-  }
-  w.addEventListener('afterprint', () => setTimeout(cleanup, 400), { once: true })
-  setTimeout(cleanup, 120000)
-}
-
-function runPrintWhenImagesReady(w: Window) {
-  const schedulePrint = () => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        try {
-          w.focus()
-          w.print()
-        } catch (e) {
-          console.error('[print] window.print failed', e)
-        }
-      })
-    })
-  }
-
-  const imgs = Array.from(w.document.images)
-  if (imgs.length === 0) {
-    setTimeout(schedulePrint, 150)
-    return
-  }
-  let pending = imgs.length
-  const onDone = () => {
-    pending -= 1
-    if (pending <= 0) setTimeout(schedulePrint, 120)
-  }
-  imgs.forEach(img => {
-    if (img.complete) onDone()
-    else {
-      img.addEventListener('load', onDone, { once: true })
-      img.addEventListener('error', onDone, { once: true })
-    }
-  })
-}
-
-/** Blob URL로 문서를 연 뒤 인쇄(열전사 드라이버 호환에 유리한 경우가 많음) */
-function printHtmlInNewWindow(docHtml: string): boolean {
-  let objectUrl: string | null = null
-  try {
-    const blob = new Blob([docHtml], { type: 'text/html;charset=utf-8' })
-    objectUrl = URL.createObjectURL(blob)
-    const w = window.open(objectUrl, '_blank')
-    if (!w) {
-      URL.revokeObjectURL(objectUrl)
-      return false
-    }
-    attachPrintLifecycle(w, () => {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl)
-        objectUrl = null
-      }
-    })
-
-    if (w.document.readyState === 'complete') {
-      runPrintWhenImagesReady(w)
-    } else {
-      w.addEventListener('load', () => runPrintWhenImagesReady(w), { once: true })
-    }
-    return true
-  } catch (e) {
-    console.error('[print] blob window failed', e)
-    if (objectUrl) URL.revokeObjectURL(objectUrl)
-  }
-
-  let w2: Window | null = null
-  try {
-    w2 = window.open('about:blank', '_blank')
-    if (!w2) return false
-    w2.document.open()
-    w2.document.write(docHtml)
-    w2.document.close()
-    attachPrintLifecycle(w2)
-    runPrintWhenImagesReady(w2)
-    return true
-  } catch (err) {
-    console.error('[print] about:blank write failed', err)
-    try {
-      w2?.close()
-    } catch {
-      /* ignore */
-    }
-    return false
-  }
-}
-
-function printHtmlInHiddenIframe(docHtml: string, paperPreset: LabelPreset, labelCount: number) {
-  const iframe = document.createElement('iframe')
-  iframe.setAttribute('aria-hidden', 'true')
-  Object.assign(iframe.style, {
-    position: 'fixed',
-    left: '-10000px',
-    top: '0',
-    width: `${Math.max(320, Math.ceil(paperPreset.widthMm * 4))}px`,
-    height: `${Math.max(400, Math.ceil(paperPreset.heightMm * 4 * Math.max(1, labelCount)))}px`,
-    border: '0',
-    opacity: '0',
-    pointerEvents: 'none',
-    zIndex: '-1',
-  })
-  document.body.appendChild(iframe)
-
-  const frameDoc = iframe.contentDocument
-  const frameWin = iframe.contentWindow
-  if (!frameDoc || !frameWin) {
-    iframe.remove()
-    return
-  }
-
-  frameDoc.open()
-  frameDoc.write(docHtml)
-  frameDoc.close()
-
-  const finalizePrint = () => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        try {
-          frameWin.focus()
-          frameWin.print()
-        } catch (e) {
-          console.error('[print] iframe.print failed', e)
-        }
-      })
-    })
-  }
-
-  const removeIframe = () => {
-    try {
-      iframe.remove()
-    } catch {
-      /* ignore */
-    }
-  }
-  frameWin.addEventListener(
-    'afterprint',
-    () => {
-      setTimeout(removeIframe, 400)
-    },
-    { once: true }
-  )
-  setTimeout(removeIframe, 120000)
-
-  const images = Array.from(frameDoc.images)
-  if (images.length === 0) {
-    setTimeout(finalizePrint, 100)
-    return
-  }
-  let pending = images.length
-  const onDone = () => {
-    pending -= 1
-    if (pending <= 0) setTimeout(finalizePrint, 100)
-  }
-  images.forEach(img => {
-    if (img.complete) onDone()
-    else {
-      img.addEventListener('load', onDone, { once: true })
-      img.addEventListener('error', onDone, { once: true })
-    }
-  })
 }
 
 function BarcodeStrip({
@@ -582,11 +338,111 @@ export function BarcodePanel() {
 
     if (!htmlLabels) return
 
-    const docHtml = buildBarcodePrintDocumentHtml(htmlLabels, paperPreset, true)
-    const opened = printHtmlInNewWindow(docHtml)
-    if (!opened) {
-      printHtmlInHiddenIframe(docHtml, paperPreset, labels.length)
+    const iframe = document.createElement('iframe')
+    // 0×0 iframe은 Chromium에서 인쇄 미리보기가 비거나 print()가 동작하지 않는 경우가 많음.
+    // 레이아웃·인쇄 엔진이 문서 크기를 알 수 있도록 화면 밖에 실제 픽셀 크기를 둔다.
+    iframe.setAttribute('aria-hidden', 'true')
+    Object.assign(iframe.style, {
+      position: 'fixed',
+      left: '-10000px',
+      top: '0',
+      width: `${Math.max(320, Math.ceil(paperPreset.widthMm * 4))}px`,
+      height: `${Math.max(400, Math.ceil(paperPreset.heightMm * 4 * Math.max(1, labels.length)))}px`,
+      border: '0',
+      opacity: '0',
+      pointerEvents: 'none',
+      zIndex: '-1',
+    })
+    document.body.appendChild(iframe)
+
+    const frameDoc = iframe.contentDocument
+    const frameWin = iframe.contentWindow
+    if (!frameDoc || !frameWin) {
+      iframe.remove()
+      return
     }
+
+    frameDoc.open()
+    frameDoc.write(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Barcode Print</title>
+    <style>
+      @page { size: ${paperPreset.widthMm}mm ${paperPreset.heightMm}mm; margin: 0; }
+      html, body { margin: 0; padding: 0; background: #fff; }
+      .label {
+        width: ${paperPreset.widthMm}mm;
+        height: ${paperPreset.heightMm}mm;
+        box-sizing: border-box;
+        padding: 1mm;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6mm;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+      }
+      .label:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .caption {
+        margin: 0;
+        font-size: 7pt;
+        line-height: 1.1;
+        text-align: center;
+        max-width: 100%;
+      }
+      .meta {
+        margin: 0;
+        font-size: 6.2pt;
+        line-height: 1.1;
+        text-align: center;
+        max-width: 100%;
+        word-break: break-all;
+      }
+      .barcode {
+        width: 96%;
+        height: auto;
+        max-height: ${Math.max(12, paperPreset.heightMm - 14)}mm;
+      }
+    </style>
+  </head>
+  <body>${htmlLabels}</body>
+</html>`)
+    frameDoc.close()
+
+    const finalize = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          frameWin.focus()
+          frameWin.print()
+          setTimeout(() => iframe.remove(), 1500)
+        })
+      })
+    }
+
+    const images = Array.from(frameDoc.images)
+    if (images.length === 0) {
+      setTimeout(finalize, 100)
+      return
+    }
+
+    let pending = images.length
+    const onDone = () => {
+      pending -= 1
+      if (pending <= 0) setTimeout(finalize, 100)
+    }
+    images.forEach(img => {
+      if (img.complete) onDone()
+      else {
+        img.addEventListener('load', onDone, { once: true })
+        img.addEventListener('error', onDone, { once: true })
+      }
+    })
   }
 
   return (
@@ -703,11 +559,7 @@ export function BarcodePanel() {
             ))}
           </select>
         </div>
-        <p className="text-xs text-slate-500">
-          웹은 USB로 직접 제어하지 않고 Windows 인쇄 창에서 <strong className="text-slate-700">Xprinter</strong>를 선택합니다.
-          「바로 인쇄」는 먼저 <strong className="text-slate-700">새 탭</strong>으로 열리며(열전사 드라이버 호환), 팝업이 막히면 숨은
-          프레임으로 다시 시도합니다. 인쇄 창에서 프린터·용지를 고른 뒤 인쇄를 마칠 때까지 탭을 닫지 마세요.
-        </p>
+        <p className="text-xs text-slate-500">미리보기는 크게, 실제 인쇄는 선택 용지 크기에 맞춰 출력됩니다.</p>
       </div>
 
       {mode === 'items' ? (
