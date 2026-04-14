@@ -36,7 +36,7 @@ export async function deleteItemsAction(ids: string[]): Promise<{ ok: boolean; e
       }))
     )
     if (logError && !logError.message.toLowerCase().includes('relation "inventory_events" does not exist')) {
-      return { ok: false, error: logError.message }
+      console.error('[inventory_events] delete log skipped:', logError.message)
     }
   }
 

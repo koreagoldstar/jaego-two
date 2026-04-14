@@ -5,6 +5,7 @@ import { allocateSequentialShCodes, formatShSequential, getNextShSequenceStart }
 import { generateBarcodeValue, generateSerialValue } from '@/lib/items/codeGeneratorsServer'
 import { redirect } from 'next/navigation'
 
+/** 입출고 이력 보조 테이블 — 실패해도 품목 등록 자체는 성공시키고 서버 로그만 남김 (throw 시 Digest 오류 페이지로 이어짐) */
 async function logInventoryEvents(
   supabase: Awaited<ReturnType<typeof createClient>>,
   rows: Array<{
@@ -27,8 +28,10 @@ async function logInventoryEvents(
       detail: r.detail ?? '',
     }))
   )
-  if (error && !error.message.toLowerCase().includes('relation "inventory_events" does not exist')) {
-    throw error
+  if (error) {
+    const msg = error.message ?? String(error)
+    if (msg.toLowerCase().includes('relation "inventory_events" does not exist')) return
+    console.error('[inventory_events] insert skipped:', msg)
   }
 }
 
@@ -53,16 +56,20 @@ export async function createItemAction(formData: FormData) {
   const location = String(formData.get('location') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
 
-  const { error } = await supabase.from('items').insert({
-    user_id: user.id,
-    name,
-    sh,
-    barcode_code: barcode_code || null,
-    serial_number: serial_number || null,
-    quantity,
-    location: location || null,
-    description: description || '',
-  })
+  const { data: inserted, error } = await supabase
+    .from('items')
+    .insert({
+      user_id: user.id,
+      name,
+      sh,
+      barcode_code: barcode_code || null,
+      serial_number: serial_number || null,
+      quantity,
+      location: location || null,
+      description: description || '',
+    })
+    .select('id')
+    .single()
 
   if (error) {
     redirect('/items/new?error=' + encodeURIComponent(error.message))
@@ -71,6 +78,7 @@ export async function createItemAction(formData: FormData) {
   await logInventoryEvents(supabase, [
     {
       user_id: user.id,
+      item_id: inserted?.id ?? null,
       event_type: 'item_create',
       item_name: name,
       quantity,

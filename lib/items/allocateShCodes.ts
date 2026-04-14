@@ -11,7 +11,11 @@ export async function getNextShSequenceStart(
   supabase: SupabaseClient,
   userId: string
 ): Promise<number> {
-  const { data } = await supabase.from('items').select('sh').eq('user_id', userId)
+  const { data, error } = await supabase.from('items').select('sh').eq('user_id', userId)
+  if (error) {
+    console.error('[getNextShSequenceStart]', error.message)
+    return 1
+  }
 
   let max = 0
   for (const row of data ?? []) {
