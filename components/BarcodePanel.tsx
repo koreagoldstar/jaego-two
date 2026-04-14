@@ -188,6 +188,10 @@ function sanitizeFilePart(s: string): string {
 
 type CodeFormat = 'CODE128' | 'CODE39' | 'QR'
 
+function oneDModuleWidth(format: CodeFormat): number {
+  return format === 'CODE39' ? 3 : 2
+}
+
 function BarcodeStrip({
   payload,
   format,
@@ -232,7 +236,8 @@ function BarcodeStrip({
     const line = to1DBarcodeSafeString(p)
     if (!line) return
 
-    const quiet = Math.max(8, compactLabel ? 6 : 12)
+    const quiet = Math.max(12, compactLabel ? 10 : 16)
+    const moduleWidth = oneDModuleWidth(format)
 
     try {
       const ctx = canvas.getContext('2d')
@@ -240,7 +245,7 @@ function BarcodeStrip({
       try {
         JsBarcode(canvas, line, {
           format,
-          width: 2,
+          width: moduleWidth,
           height: barcodeHeight,
           displayValue: false,
           margin: quiet,
@@ -323,7 +328,7 @@ export function BarcodePanel() {
   const [shPrefix, setShPrefix] = useState('')
   const [serial, setSerial] = useState('')
   const [sep, setSep] = useState('|')
-  const [format, setFormat] = useState<CodeFormat>('CODE128')
+  const [format, setFormat] = useState<CodeFormat>('CODE39')
   const [paperKey, setPaperKey] = useState<string>('58x40')
 
   const [items, setItems] = useState<Item[]>([])
@@ -445,6 +450,7 @@ export function BarcodePanel() {
 
       const line = to1DBarcodeSafeString(p)
       if (!line) return Promise.resolve(null)
+      const moduleWidth = oneDModuleWidth(format)
 
       return new Promise(resolve => {
         const canvas = document.createElement('canvas')
@@ -452,10 +458,10 @@ export function BarcodePanel() {
           try {
             JsBarcode(canvas, line, {
               format,
-              width: 2,
+              width: moduleWidth,
               height: 100,
               displayValue: true,
-              margin: 14,
+              margin: 16,
             })
           } catch {
             if (format === 'CODE39') {
@@ -511,13 +517,13 @@ export function BarcodePanel() {
       if (!line) return null
 
       const barHeight = Math.min(220, Math.max(40, Math.floor(maxHPx * 0.88)))
-      const quietPx = Math.max(24, Math.round(maxWPx * 0.1))
+      const quietPx = Math.max(30, Math.round(maxWPx * 0.14))
 
       const probe = document.createElement('canvas')
-      let bestModule = 2
+      let bestModule = format === 'CODE39' ? 3 : 2
       let bestFit = -1
 
-      const tryProbe = (moduleW: 3 | 2 | 1) => {
+      const tryProbe = (moduleW: 4 | 3 | 2 | 1) => {
         try {
           const ctx = probe.getContext('2d')
           if (ctx) ctx.clearRect(0, 0, probe.width, probe.height)
@@ -538,7 +544,7 @@ export function BarcodePanel() {
         }
       }
 
-      for (const moduleW of [3, 2] as const) tryProbe(moduleW)
+      for (const moduleW of (format === 'CODE39' ? [4, 3, 2] : [3, 2]) as const) tryProbe(moduleW)
       if (bestFit < 0) tryProbe(1)
       if (bestFit < 0) return null
 
@@ -783,9 +789,8 @@ export function BarcodePanel() {
       {mode === 'items' ? (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
-            품목에 저장된 <strong className="text-slate-800">바코드 값</strong>이 있으면 그대로 쓰고, 없으면{' '}
-            <strong className="text-slate-800">SH</strong>와 <strong className="text-slate-800">시리얼</strong>을
-            구분자로 이어 붙입니다.
+            품목 라벨 값은 <strong className="text-slate-800">SH / 시리얼 / 바코드</strong> 중{' '}
+            <strong className="text-slate-800">가장 짧은 값</strong>을 우선 사용해 1D 인식률을 높입니다.
           </p>
           {itemsLoading ? (
             <div className="flex justify-center py-8 text-slate-500">

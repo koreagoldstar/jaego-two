@@ -13,6 +13,12 @@ function withUnitSuffix(base: string, index: number, total: number) {
   return `${base}-${String(index).padStart(3, '0')}`
 }
 
+function pickCompactPayload(values: string[]): string | null {
+  const candidates = values.map(v => v.trim()).filter(Boolean)
+  if (candidates.length === 0) return null
+  return candidates.sort((a, b) => a.length - b.length)[0] ?? null
+}
+
 export function buildItemLabelVariants(item: Item, separator: string): ItemLabelVariant[] {
   const qty = Math.max(0, Number(item.quantity) || 0)
   if (qty <= 0) return []
@@ -28,8 +34,8 @@ export function buildItemLabelVariants(item: Item, separator: string): ItemLabel
     const serial = withUnitSuffix(baseSerial, i, qty) || null
     const sh = withUnitSuffix(baseSh, i, qty)
 
-    // Keep 1D labels simple for better scan reliability.
-    const payload = barcode || sh || serial || null
+    // Keep 1D labels compact for better scan reliability.
+    const payload = pickCompactPayload([sh, serial || '', barcode || ''])
 
     rows.push({
       index: i,
