@@ -27,11 +27,136 @@ const LABEL_PRESETS: LabelPreset[] = [
   { key: '100x50', label: '100 × 50mm', widthMm: 100, heightMm: 50 },
 ]
 
-/** 본문·여백을 제외한 바코드 이미지 최대 높이(mm) */
+/** 본문(캡션·메타)에 쓸 여백을 최소화해 바코드 영역을 최대화 */
 function labelBarcodeMaxHeightMm(heightMm: number): number {
-  const pad = 1.5
-  const textReserve = Math.min(14, heightMm * 0.35)
-  return Math.max(6, heightMm - textReserve - pad * 2)
+  const pad = 1.2
+  const textReserve = Math.min(10, heightMm * 0.26)
+  return Math.max(5, heightMm - textReserve - pad * 2)
+}
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/** 열전사 203dpi — 인쇄용 PNG가 물리 mm와 맞물리도록 */
+const DPMM_203 = 203 / 25.4
+
+function scaleCanvasToMax(source: HTMLCanvasElement, maxWPx: number, maxHPx: number): HTMLCanvasElement {
+  const w = source.width
+  const h = source.height
+  if (w <= 0 || h <= 0) return source
+  const scale = Math.min(maxWPx / w, maxHPx / h, 1)
+  if (scale >= 0.999) return source
+  const out = document.createElement('canvas')
+  out.width = Math.max(1, Math.round(w * scale))
+  out.height = Math.max(1, Math.round(h * scale))
+  const ctx = out.getContext('2d')
+  if (!ctx) return source
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(source, 0, 0, out.width, out.height)
+  return out
+}
+
+/** 숨김 iframe 인쇄 전용 — 본 페이지 @page 와 충돌하지 않음 */
+function buildPrintIframeStyles(widthMm: number, heightMm: number, barcodeMaxMm: number): string {
+  const pad = 1.2
+  return `
+      @page {
+        size: ${widthMm}mm ${heightMm}mm;
+        margin: 0 !important;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      html {
+        margin: 0;
+        padding: 0;
+        width: ${widthMm}mm;
+        height: ${heightMm}mm;
+        overflow: hidden;
+      }
+      body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: ${widthMm}mm;
+        height: ${heightMm}mm;
+        min-height: ${heightMm}mm;
+        max-height: ${heightMm}mm;
+        background: #fff;
+        overflow: hidden;
+      }
+      .label {
+        width: ${widthMm}mm;
+        height: ${heightMm}mm;
+        min-height: ${heightMm}mm;
+        max-height: ${heightMm}mm;
+        margin: 0;
+        padding: ${pad}mm;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 0.25mm;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+      }
+      .label:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .caption {
+        margin: 0;
+        font-size: 6pt;
+        line-height: 1.05;
+        text-align: center;
+        flex-shrink: 0;
+      }
+      .meta {
+        margin: 0;
+        font-size: 5.5pt;
+        line-height: 1.05;
+        text-align: center;
+        word-break: break-all;
+        flex-shrink: 0;
+      }
+      .barcode-wrap {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+      .barcode {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        max-height: ${barcodeMaxMm}mm;
+        object-fit: contain;
+        object-position: center center;
+      }
+      @media print {
+        @page {
+          size: ${widthMm}mm ${heightMm}mm;
+          margin: 0 !important;
+        }
+        html, body {
+          width: ${widthMm}mm !important;
+          height: ${heightMm}mm !important;
+          overflow: hidden !important;
+        }
+      }
+  `
 }
 
 function getItemLabelRows(item: Item, sep: string) {
@@ -59,7 +184,7 @@ function BarcodeStrip({
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const compactLabel = paperHeightMm <= 24
-  const barcodeHeight = compactLabel ? 34 : Math.max(46, Math.floor(paperHeightMm * 2.4))
+  const barcodeHeight = compactLabel ? 34 : Math.max(46, Math.floor(paperHeightMm * 2.8))
   const normalizedMeta =
     compactLabel && metaLines.length > 0
       ? [metaLines.join(' / ')]
@@ -242,6 +367,32 @@ export function BarcodePanel() {
     [format]
   )
 
+  /** 인쇄 iframe 전용 — 203dpi 상한에 맞춰 큰 비트맵 생성 후 슬롯에 맞게 스케일 */
+  const drawToDataUrlForPrint = useCallback(
+    (payload: string, labelWidthMm: number, labelHeightMm: number): string | null => {
+      const padMm = 1.2
+      const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm)
+      const maxWPx = Math.max(64, Math.round((labelWidthMm - padMm * 2) * DPMM_203))
+      const maxHPx = Math.max(40, Math.round(barcodeMaxMm * DPMM_203))
+      const canvas = document.createElement('canvas')
+      try {
+        const barHeight = Math.min(220, Math.max(40, Math.floor(maxHPx * 0.95)))
+        JsBarcode(canvas, payload, {
+          format,
+          width: 2,
+          height: barHeight,
+          displayValue: false,
+          margin: Math.max(2, Math.round(3 * (DPMM_203 / 8))),
+        })
+        const scaled = scaleCanvasToMax(canvas, maxWPx, maxHPx)
+        return scaled.toDataURL('image/png')
+      } catch {
+        return null
+      }
+    },
+    [format]
+  )
+
   const triggerDownload = (blob: Blob, filename: string) => {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -282,83 +433,111 @@ export function BarcodePanel() {
   function printBarcode() {
     if (mode === 'manual' && !manualPayload) return
     if (mode === 'items' && validItemRows.length === 0) return
-    requestAnimationFrame(() => {
-      window.print()
+
+    const labels =
+      mode === 'manual'
+        ? [
+            {
+              caption: '',
+              metaLines: [] as string[],
+              payload: manualPayload,
+            },
+          ]
+        : validItemRows.map(({ item, payload, unitIndex, serial }) => ({
+            caption: `${item.name} #${unitIndex}`,
+            metaLines: [
+              item.sh ? `SH: ${item.quantity > 1 ? `${item.sh}-${String(unitIndex).padStart(3, '0')}` : item.sh}` : '',
+              serial ? `Serial: ${serial}` : '',
+            ].filter(Boolean),
+            payload,
+          }))
+
+    const htmlLabels = labels
+      .map(label => {
+        const dataUrl = drawToDataUrlForPrint(label.payload, wMm, hMm)
+        if (!dataUrl) return ''
+        const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
+        const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
+        return `
+          <section class="label">
+            ${captionHtml}
+            ${metaHtml}
+            <div class="barcode-wrap">
+              <img class="barcode" src="${dataUrl}" alt="" />
+            </div>
+          </section>
+        `
+      })
+      .filter(Boolean)
+      .join('')
+
+    if (!htmlLabels) return
+
+    const iframe = document.createElement('iframe')
+    iframe.setAttribute('aria-hidden', 'true')
+    Object.assign(iframe.style, {
+      position: 'fixed',
+      left: '-10000px',
+      top: '0',
+      width: `${Math.max(320, Math.ceil(wMm * 4))}px`,
+      height: `${Math.max(400, Math.ceil(hMm * 4 * Math.max(1, labels.length)))}px`,
+      border: '0',
+      opacity: '0',
+      pointerEvents: 'none',
+      zIndex: '-1',
+    })
+    document.body.appendChild(iframe)
+
+    const frameDoc = iframe.contentDocument
+    const frameWin = iframe.contentWindow
+    if (!frameDoc || !frameWin) {
+      iframe.remove()
+      return
+    }
+
+    frameDoc.open()
+    frameDoc.write(`<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>Barcode</title>
+    <style>${buildPrintIframeStyles(wMm, hMm, printBarcodeMaxHeightMm)}</style>
+  </head>
+  <body>${htmlLabels}</body>
+</html>`)
+    frameDoc.close()
+
+    const finalize = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          frameWin.focus()
+          frameWin.print()
+          setTimeout(() => iframe.remove(), 1500)
+        })
+      })
+    }
+
+    const images = Array.from(frameDoc.images)
+    if (images.length === 0) {
+      setTimeout(finalize, 100)
+      return
+    }
+    let pending = images.length
+    const onDone = () => {
+      pending -= 1
+      if (pending <= 0) setTimeout(finalize, 100)
+    }
+    images.forEach(img => {
+      if (img.complete) onDone()
+      else {
+        img.addEventListener('load', onDone, { once: true })
+        img.addEventListener('error', onDone, { once: true })
+      }
     })
   }
 
   return (
     <div className="space-y-4 rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-@media print {
-  @page {
-    size: ${wMm}mm ${hMm}mm;
-    margin: 0 !important;
-  }
-  html, body {
-    width: ${wMm}mm !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  body * { visibility: hidden !important; }
-  #barcode-print-area, #barcode-print-area * { visibility: visible !important; }
-  #barcode-print-area {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: ${wMm}mm !important;
-    min-height: ${hMm}mm !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    padding: 0 !important;
-    background: white !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    box-sizing: border-box !important;
-  }
-  #barcode-print-area > p { display: none !important; }
-  #barcode-print-area .barcode-print-label {
-    width: ${wMm}mm !important;
-    height: ${hMm}mm !important;
-    min-height: ${hMm}mm !important;
-    max-height: ${hMm}mm !important;
-    box-sizing: border-box !important;
-    padding: 1.5mm !important;
-    margin: 0 !important;
-    gap: 0.35mm !important;
-    overflow: hidden !important;
-    align-items: stretch !important;
-    justify-content: flex-start !important;
-    page-break-after: always !important;
-    break-after: page !important;
-    border: 0 !important;
-  }
-  #barcode-print-area .barcode-print-label:last-child {
-    page-break-after: auto !important;
-    break-after: auto !important;
-  }
-  #barcode-print-area .barcode-print-label p {
-    margin: 0 !important;
-    line-height: 1.05 !important;
-  }
-  #barcode-print-area .barcode-print-label canvas {
-    display: block !important;
-    margin: 0 auto !important;
-    max-width: calc(${wMm}mm - 3mm) !important;
-    max-height: ${printBarcodeMaxHeightMm}mm !important;
-    width: auto !important;
-    height: auto !important;
-    object-fit: contain !important;
-  }
-}
-`,
-        }}
-      />
-
       <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-1 gap-1">
         <button
           type="button"
@@ -417,9 +596,8 @@ export function BarcodePanel() {
             ))}
           </select>
           <p className="text-xs text-slate-500 mt-1 max-w-md leading-relaxed">
-            인쇄 창의 <strong className="text-slate-700">용지 크기</strong>를 여기와 같게 맞추면(예: {wMm}×{hMm}
-            mm) 레이아웃이 용지에 맞습니다. <strong className="text-slate-700">배율 100%</strong>, &quot;페이지에 맞춤&quot;은 끄는 것이
-            좋습니다.
+            <strong className="text-slate-700">바로 인쇄</strong>는 선택한 {wMm}×{hMm}mm 전용 페이지로 열립니다. 프린터에서도
+            같은 사용자 정의 용지를 쓰고, <strong className="text-slate-700">배율 100%</strong>·&quot;페이지에 맞춤&quot; 끔을 권장합니다.
           </p>
         </div>
       </div>
@@ -601,7 +779,7 @@ export function BarcodePanel() {
         </button>
       </div>
       <p className="text-xs text-slate-500 text-center">
-        용지 크기는 위에서 고른 mm와 인쇄기 설정이 같아야 합니다. 미리보기와 다르면 프린터 속성의 사용자 정의 용지를 확인하세요.
+        인쇄는 미리보기와 별도로 고해상도 바코드를 용지 한 장에 맞춥니다. 어긋나면 용지 크기·여백 0·배율 100%를 다시 확인하세요.
       </p>
     </div>
   )
