@@ -191,7 +191,10 @@ export function BulkOutClient() {
         여러 제품 바코드를 연속으로 찍고, 프로젝트 1개로 한 번에 출고 처리합니다.
       </p>
 
-      <BarcodeCamera onDecode={resolveBarcode} videoClassName="w-full max-h-[min(38vh,280px)] object-contain bg-black" />
+      <BarcodeCamera
+        onDecode={resolveBarcode}
+        videoClassName="w-full max-h-[min(38vh,280px)] min-h-[200px] flex flex-col items-center justify-center bg-slate-950 text-slate-300 py-4"
+      />
 
       {scanLine && (
         <p className="text-center text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-100 rounded-xl py-2 px-3">
