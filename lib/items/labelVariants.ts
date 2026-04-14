@@ -16,8 +16,8 @@ function withUnitSuffix(base: string, index: number, total: number) {
 export function buildItemLabelVariants(item: Item, separator: string): ItemLabelVariant[] {
   const qty = Math.max(0, Number(item.quantity) || 0)
   if (qty <= 0) return []
+  void separator
 
-  const sep = separator || '|'
   const baseBarcode = item.barcode_code?.trim() ?? ''
   const baseSerial = item.serial_number?.trim() ?? ''
   const baseSh = item.sh?.trim() ?? ''
@@ -28,12 +28,8 @@ export function buildItemLabelVariants(item: Item, separator: string): ItemLabel
     const serial = withUnitSuffix(baseSerial, i, qty) || null
     const sh = withUnitSuffix(baseSh, i, qty)
 
-    const payload =
-      barcode ||
-      (sh && serial ? `${sh}${sep}${serial}` : null) ||
-      sh ||
-      serial ||
-      null
+    // Keep 1D labels simple for better scan reliability.
+    const payload = barcode || sh || serial || null
 
     rows.push({
       index: i,

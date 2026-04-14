@@ -21,19 +21,19 @@ type LabelPreset = {
 }
 
 const LABEL_PRESETS: LabelPreset[] = [
-  { key: '40x20', label: '40 × 20mm', widthMm: 40, heightMm: 20 },
-  { key: '40x30', label: '40 × 30mm', widthMm: 40, heightMm: 30 },
-  { key: '50x30', label: '50 × 30mm', widthMm: 50, heightMm: 30 },
-  { key: '50.8x101.6', label: '2×4in (50.8 × 101.6mm)', widthMm: 50.8, heightMm: 101.6 },
-  { key: '58x40', label: '58 × 40mm (기본)', widthMm: 58, heightMm: 40 },
-  { key: '70x50', label: '70 × 50mm', widthMm: 70, heightMm: 50 },
-  { key: '100x60', label: '100 × 60mm', widthMm: 100, heightMm: 60 },
-  { key: '101.6x101.6', label: '4×4in (101.6mm)', widthMm: 101.6, heightMm: 101.6 },
-  { key: '101.6x152.4', label: '4×6in (101.6 × 152.4mm)', widthMm: 101.6, heightMm: 152.4 },
-  { key: '100x50', label: '100 × 50mm', widthMm: 100, heightMm: 50 },
+  { key: '40x20', label: '40 ?20mm', widthMm: 40, heightMm: 20 },
+  { key: '40x30', label: '40 ?30mm', widthMm: 40, heightMm: 30 },
+  { key: '50x30', label: '50 ?30mm', widthMm: 50, heightMm: 30 },
+  { key: '50.8x101.6', label: '2?in (50.8 ?101.6mm)', widthMm: 50.8, heightMm: 101.6 },
+  { key: '58x40', label: '58 ?40mm (??)', widthMm: 58, heightMm: 40 },
+  { key: '70x50', label: '70 ?50mm', widthMm: 70, heightMm: 50 },
+  { key: '100x60', label: '100 ?60mm', widthMm: 100, heightMm: 60 },
+  { key: '101.6x101.6', label: '4?in (101.6mm)', widthMm: 101.6, heightMm: 101.6 },
+  { key: '101.6x152.4', label: '4?in (101.6 ?152.4mm)', widthMm: 101.6, heightMm: 152.4 },
+  { key: '100x50', label: '100 ?50mm', widthMm: 100, heightMm: 50 },
 ]
 
-/** 본문(캡션·메타)에 쓸 여백을 최소화해 바코드 영역을 최대화 */
+/** ??(????)? ? ??? ???? ??? ??? ??? */
 function labelBarcodeMaxHeightMm(heightMm: number): number {
   const pad = 1.2
   const textReserve = Math.min(10, heightMm * 0.26)
@@ -49,10 +49,10 @@ function escapeHtml(input: string): string {
     .replace(/'/g, '&#39;')
 }
 
-/** 열전사 203dpi — 인쇄용 PNG가 물리 mm와 맞물리도록 */
+/** ??? 203dpi ? ??? PNG? ?? mm? ????? */
 const DPMM_203 = 203 / 25.4
 
-/** 인쇄용: 축소 시 부드러운 보간을 끄면 막대 경계가 유지되어 스캔이 잘 됨 */
+/** ???: ?? ? ???? ??? ?? ?? ??? ???? ??? ? ? */
 function scaleCanvasToMax(
   source: HTMLCanvasElement,
   maxWPx: number,
@@ -75,7 +75,7 @@ function scaleCanvasToMax(
   return out
 }
 
-/** 숨김 iframe 인쇄 전용 — 본 페이지 @page 와 충돌하지 않음 */
+/** ?? iframe ?? ?? ? ? ??? @page ? ???? ?? */
 function buildPrintIframeStyles(widthMm: number, heightMm: number, barcodeMaxMm: number): string {
   const pad = 1.2
   return `
@@ -292,7 +292,7 @@ function BarcodeStrip({
               : (() => {
                   const safe = to1DBarcodeSafeString(payload)
                   return is1DBarcodePayloadLossy(payload, safe)
-                    ? `${safe} · (한글 등은 1D에 미포함 — QR 권장)`
+                    ? `${safe} ?(?? ?? 1D? ??? ? QR ??)`
                     : safe
                 })()}
           </p>
@@ -323,7 +323,7 @@ export function BarcodePanel() {
   const [shPrefix, setShPrefix] = useState('')
   const [serial, setSerial] = useState('')
   const [sep, setSep] = useState('|')
-  const [format, setFormat] = useState<CodeFormat>('CODE128')
+  const [format, setFormat] = useState<CodeFormat>('CODE39')
   const [paperKey, setPaperKey] = useState<string>('58x40')
 
   const [items, setItems] = useState<Item[]>([])
@@ -481,7 +481,7 @@ export function BarcodePanel() {
   )
 
   /**
-   * 인쇄 iframe 전용 — 1D: 203dpi·쿼트존·선명 축소. QR: 슬롯에 맞는 정사각 고해상도.
+   * ?? iframe ?? ? 1D: 203dpi????? ??. QR: ??? ?? ??? ????.
    */
   const drawToDataUrlForPrint = useCallback(
     async (payload: string, labelWidthMm: number, labelHeightMm: number): Promise<string | null> => {
@@ -721,7 +721,7 @@ export function BarcodePanel() {
           }`}
         >
           <Package className="w-4 h-4 shrink-0" />
-          등록 품목
+          ?? ??
         </button>
         <button
           type="button"
@@ -731,13 +731,13 @@ export function BarcodePanel() {
           }`}
         >
           <PencilLine className="w-4 h-4 shrink-0" />
-          직접 입력
+          ?? ??
         </button>
       </div>
 
       <div className="flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-sm text-slate-600 mb-1">구분자 (직접·품목 공통)</label>
+          <label className="block text-sm text-slate-600 mb-1">??? (???? ??)</label>
           <input
             value={sep}
             onChange={e => setSep(e.target.value)}
@@ -746,22 +746,22 @@ export function BarcodePanel() {
           />
         </div>
         <div>
-          <label className="block text-sm text-slate-600 mb-1">포맷</label>
+          <label className="block text-sm text-slate-600 mb-1">??</label>
           <select
             value={format}
             onChange={e => setFormat(e.target.value as CodeFormat)}
             className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
           >
-            <option value="CODE128">CODE128 (1D 바코드)</option>
-            <option value="CODE39">CODE39</option>
-            <option value="QR">QR코드 (2D·카메라 스캔)</option>
+            <option value="CODE39">CODE39 (???? ??)</option>
+            <option value="CODE128">CODE128</option>
+            <option value="QR">QR?? (2D??? ??)</option>
           </select>
           <p className="text-xs text-slate-500 mt-1 max-w-md">
-            QR은 같은 값도 패턴이 커서 라벨에 잘 보이고, 휴대폰 카메라로 읽기 쉽습니다. 레이저 1D 스캐너만 있으면 CODE128을 쓰세요.
+            1D? CODE39? ? ??? ???? ??? ??? ??? ?????. ?? ??? ??? ??? QR? ?????.
           </p>
         </div>
         <div>
-          <label className="block text-sm text-slate-600 mb-1">라벨 용지 (가로×세로 mm)</label>
+          <label className="block text-sm text-slate-600 mb-1">?? ?? (???? mm)</label>
           <select
             value={paperKey}
             onChange={e => setPaperKey(e.target.value)}
@@ -783,9 +783,9 @@ export function BarcodePanel() {
       {mode === 'items' ? (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
-            품목에 저장된 <strong className="text-slate-800">바코드 값</strong>이 있으면 그대로 쓰고, 없으면{' '}
-            <strong className="text-slate-800">SH</strong>와 <strong className="text-slate-800">시리얼</strong>을
-            구분자로 이어 붙입니다.
+            ??? ??? <strong className="text-slate-800">??? ?</strong>? ??? ??? ??, ???{' '}
+            <strong className="text-slate-800">SH</strong>? <strong className="text-slate-800">???</strong>?
+            ???? ?? ????.
           </p>
           {itemsLoading ? (
             <div className="flex justify-center py-8 text-slate-500">
@@ -793,14 +793,14 @@ export function BarcodePanel() {
             </div>
           ) : items.length === 0 ? (
             <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-              등록된 품목이 없습니다. 품목 추가 후 이용하세요.
+              ??? ??? ????. ?? ?? ? ?????.
             </p>
           ) : (
             <>
               <input
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
-                placeholder="이름·바코드·SH·시리얼 검색"
+                placeholder="??????갎??? ??"
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
               />
               <div className="flex flex-wrap gap-2">
@@ -809,17 +809,17 @@ export function BarcodePanel() {
                   onClick={selectAllFiltered}
                   className="text-xs font-medium text-blue-600 hover:underline"
                 >
-                  목록 전체 선택
+                  ?? ?? ??
                 </button>
                 <button
                   type="button"
                   onClick={clearSelection}
                   className="text-xs font-medium text-slate-600 hover:underline"
                 >
-                  선택 해제
+                  ?? ??
                 </button>
                 <span className="text-xs text-slate-500 ml-auto">
-                  선택 {validItemRows.length}개
+                  ?? {validItemRows.length}?
                 </span>
               </div>
               <div className="max-h-[min(52vh,360px)] overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
@@ -845,10 +845,10 @@ export function BarcodePanel() {
                         <p className="text-xs text-slate-500 mt-0.5">
                           {pCount > 0 ? (
                             <>
-                              재고 기준 라벨: <span className="font-mono text-slate-700">{pCount}개</span>
+                              ?? ?? ??: <span className="font-mono text-slate-700">{pCount}?</span>
                             </>
                           ) : (
-                            <span className="text-amber-700">바코드·SH·시리얼 중 하나 이상 필요</span>
+                            <span className="text-amber-700">????갎??? ? ?? ?? ??</span>
                           )}
                         </p>
                       </div>
@@ -862,26 +862,26 @@ export function BarcodePanel() {
       ) : (
         <>
           <p className="text-sm text-slate-600">
-            SH·시리얼을 넣으면 <code className="text-xs bg-slate-100 px-1 rounded">{sep || '|'}</code> 로 이어
-            CODE128/CODE39 또는 QR코드로 만듭니다.
+            SH???? ??? <code className="text-xs bg-slate-100 px-1 rounded">{sep || '|'}</code> ? ??
+            CODE128/CODE39 ?? QR??? ????.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="block text-sm text-slate-600 mb-1">SH / 접두어</label>
+              <label className="block text-sm text-slate-600 mb-1">SH / ???</label>
               <input
                 value={shPrefix}
                 onChange={e => setShPrefix(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-                placeholder="예: MIC-900"
+                placeholder="?: MIC-900"
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-600 mb-1">시리얼</label>
+              <label className="block text-sm text-slate-600 mb-1">???</label>
               <input
                 value={serial}
                 onChange={e => setSerial(e.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-                placeholder="예: SN2026001"
+                placeholder="?: SN2026001"
               />
             </div>
           </div>
@@ -900,19 +900,19 @@ export function BarcodePanel() {
                   paperHeightMm={hMm}
                 />
               ) : (
-                <span className="text-slate-400 text-sm">값을 입력하면 미리보기가 나옵니다.</span>
+                <span className="text-slate-400 text-sm">?? ???? ????? ????.</span>
               )}
             </div>
           </>
         ) : (
           <>
             <p className="text-xs text-slate-500 mb-3 print:text-slate-800">
-              선택한 품목별 바코드 ({validItemRows.length}개)
+              ??? ??? ??? ({validItemRows.length}?)
             </p>
             <div className="flex flex-col gap-0">
               {validItemRows.length === 0 ? (
                 <span className="text-slate-400 text-sm text-center py-8">
-                  품목을 선택하세요. (바코드 값 또는 SH·시리얼이 있는 품목만 인쇄됩니다)
+                  ??? ?????. (??? ? ?? SH???? ?? ??? ?????)
                 </span>
               ) : (
                 validItemRows.map(({ item, payload, unitIndex, serial }) => (
@@ -943,7 +943,7 @@ export function BarcodePanel() {
           className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 text-white font-medium py-3 shadow-sm disabled:opacity-40 active:scale-[0.99]"
         >
           <Printer className="w-5 h-5 shrink-0" aria-hidden />
-          바로 인쇄
+          ?? ??
         </button>
         <button
           type="button"
@@ -952,12 +952,12 @@ export function BarcodePanel() {
           className="rounded-xl bg-blue-600 text-white font-medium py-3 shadow-sm disabled:opacity-40"
         >
           {mode === 'items' && validItemRows.length > 1
-            ? `PNG ${validItemRows.length}개 다운로드`
-            : 'PNG 다운로드'}
+            ? `PNG ${validItemRows.length}? ????`
+            : 'PNG ????'}
         </button>
       </div>
       <p className="text-xs text-slate-500 text-center">
-        인쇄는 미리보기와 별도로 고해상도 바코드를 용지 한 장에 맞춥니다. 어긋나면 용지 크기·여백 0·배율 100%를 다시 확인하세요.
+        ??? ????? ??? ???? ???? ?? ? ?? ????. ???? ?? ???? 0?? 100%? ?? ?????.
       </p>
     </div>
   )
