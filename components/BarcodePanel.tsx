@@ -46,7 +46,13 @@ function escapeHtml(input: string): string {
 /** 열전사 203dpi — 인쇄용 PNG가 물리 mm와 맞물리도록 */
 const DPMM_203 = 203 / 25.4
 
-function scaleCanvasToMax(source: HTMLCanvasElement, maxWPx: number, maxHPx: number): HTMLCanvasElement {
+/** 인쇄용: 축소 시 부드러운 보간을 끄면 막대 경계가 유지되어 스캔이 잘 됨 */
+function scaleCanvasToMax(
+  source: HTMLCanvasElement,
+  maxWPx: number,
+  maxHPx: number,
+  sharp: boolean = false
+): HTMLCanvasElement {
   const w = source.width
   const h = source.height
   if (w <= 0 || h <= 0) return source
@@ -57,10 +63,15 @@ function scaleCanvasToMax(source: HTMLCanvasElement, maxWPx: number, maxHPx: num
   out.height = Math.max(1, Math.round(h * scale))
   const ctx = out.getContext('2d')
   if (!ctx) return source
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
+  ctx.imageSmoothingEnabled = !sharp
+  if (!sharp) ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(source, 0, 0, out.width, out.height)
   return out
+}
+
+/** 보이지 않는 문자 제거 — DB/복사 시 섞인 ZWSP 등이 심볼로 깨질 수 있음 */
+function normalizeBarcodePayload(payload: string): string {
+  return payload.replace(/[\u200B-\u200D\uFEFF]/g, '').trim()
 }
 
 /** 숨김 iframe 인쇄 전용 — 본 페이지 @page 와 충돌하지 않음 */
@@ -145,6 +156,7 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number, barcodeMaxMm:
         max-height: ${barcodeMaxMm}mm;
         object-fit: contain;
         object-position: center center;
+        image-rendering: crisp-edges;
       }
       @media print {
         @page {
@@ -195,18 +207,32 @@ function BarcodeStrip({
 
   useEffect(() => {
     const canvas = ref.current
-    if (!canvas || !payload) return
+    const p = normalizeBarcodePayload(payload)
+    if (!canvas || !p) return
     try {
       const ctx = canvas.getContext('2d')
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
-      JsBarcode(canvas, payload, {
-        format,
-        width: 2,
-        height: barcodeHeight,
-        displayValue: false,
-        margin: compactLabel ? 1 : 3,
-        fontSize: compactLabel ? 8 : 10,
-      })
+      try {
+        JsBarcode(canvas, p, {
+          format,
+          width: 2,
+          height: barcodeHeight,
+          displayValue: false,
+          margin: compactLabel ? 1 : 3,
+          fontSize: compactLabel ? 8 : 10,
+        })
+      } catch {
+        if (format === 'CODE39') {
+          JsBarcode(canvas, p, {
+            format: 'CODE128',
+            width: 2,
+            height: barcodeHeight,
+            displayValue: false,
+            margin: compactLabel ? 1 : 3,
+            fontSize: compactLabel ? 8 : 10,
+          })
+        }
+      }
     } catch {
       /* invalid */
     }
@@ -354,7 +380,12 @@ export function BarcodePanel() {
       return new Promise(resolve => {
         const canvas = document.createElement('canvas')
         try {
-          JsBarcode(canvas, payload, {
+          const p = normalizeBarcodePayload(payload)
+          if (!p) {
+            resolve(null)
+            return
+          }
+          JsBarcode(canvas, p, {
             format,
             width: 2,
             height: 100,
@@ -370,24 +401,65 @@ export function BarcodePanel() {
     [format]
   )
 
-  /** 인쇄 iframe 전용 — 203dpi 상한에 맞춰 큰 비트맵 생성 후 슬롯에 맞게 스케일 */
+  /**
+   * 인쇄 iframe 전용 — 203dpi 슬롯 안에서 막대를 최대한 두껍게(모듈 폭 3→2→1 시도),
+   * ISO 쿼트존(여백) 확보, 축소 시 선명 보간으로 스캔 인식률 개선.
+   */
   const drawToDataUrlForPrint = useCallback(
     (payload: string, labelWidthMm: number, labelHeightMm: number): string | null => {
+      const clean = normalizeBarcodePayload(payload)
+      if (!clean) return null
+
       const padMm = 1.2
       const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm)
       const maxWPx = Math.max(64, Math.round((labelWidthMm - padMm * 2) * DPMM_203))
       const maxHPx = Math.max(40, Math.round(barcodeMaxMm * DPMM_203))
+      const barHeight = Math.min(220, Math.max(40, Math.floor(maxHPx * 0.88)))
+      const quietPx = Math.max(16, Math.round(maxWPx * 0.07))
+
+      const probe = document.createElement('canvas')
+      let bestModule = 2
+      let bestFit = -1
+
+      for (const moduleW of [3, 2, 1] as const) {
+        try {
+          const ctx = probe.getContext('2d')
+          if (ctx) ctx.clearRect(0, 0, probe.width, probe.height)
+          JsBarcode(probe, clean, {
+            format,
+            width: moduleW,
+            height: barHeight,
+            displayValue: false,
+            margin: quietPx,
+          })
+          const fit = Math.min(maxWPx / probe.width, maxHPx / probe.height, 1)
+          if (fit > bestFit + 1e-4 || (Math.abs(fit - bestFit) < 1e-4 && moduleW > bestModule)) {
+            bestFit = fit
+            bestModule = moduleW
+          }
+        } catch {
+          /* try next */
+        }
+      }
+
       const canvas = document.createElement('canvas')
-      try {
-        const barHeight = Math.min(220, Math.max(40, Math.floor(maxHPx * 0.95)))
-        JsBarcode(canvas, payload, {
-          format,
-          width: 2,
+      const draw = (fmt: 'CODE128' | 'CODE39') =>
+        JsBarcode(canvas, clean, {
+          format: fmt,
+          width: bestModule,
           height: barHeight,
           displayValue: false,
-          margin: Math.max(2, Math.round(3 * (DPMM_203 / 8))),
+          margin: quietPx,
         })
-        const scaled = scaleCanvasToMax(canvas, maxWPx, maxHPx)
+
+      try {
+        try {
+          draw(format)
+        } catch {
+          if (format === 'CODE39') draw('CODE128')
+          else throw new Error('barcode')
+        }
+        const scaled = scaleCanvasToMax(canvas, maxWPx, maxHPx, true)
         return scaled.toDataURL('image/png')
       } catch {
         return null
