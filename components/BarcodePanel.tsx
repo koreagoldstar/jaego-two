@@ -54,6 +54,14 @@ function labelBarcodeMaxHeightMm(heightMm: number): number {
 /** 열전사 203dpi 기준 mm→px (브라우저가 PNG를 물리 크기에 맞추기 쉽게) */
 const DPMM_203 = 203 / 25.4
 
+/** 브라우저·프린터가 @page 가로/세로를 뒤집는 경우를 줄이기 위해 orientation 키워드 명시 */
+function pageSizeRule(widthMm: number, heightMm: number): string {
+  if (widthMm >= heightMm) {
+    return `size: ${widthMm}mm ${heightMm}mm landscape;`
+  }
+  return `size: ${widthMm}mm ${heightMm}mm portrait;`
+}
+
 function scaleCanvasToMax(source: HTMLCanvasElement, maxWPx: number, maxHPx: number): HTMLCanvasElement {
   const w = source.width
   const h = source.height
@@ -77,7 +85,7 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number): string {
   const innerW = `calc(${widthMm}mm - ${pad * 2}mm)`
   return `
       @page {
-        size: ${widthMm}mm ${heightMm}mm;
+        ${pageSizeRule(widthMm, heightMm)}
         margin: 0 !important;
       }
       * {
@@ -152,7 +160,7 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number): string {
       }
       @media print {
         @page {
-          size: ${widthMm}mm ${heightMm}mm;
+          ${pageSizeRule(widthMm, heightMm)}
           margin: 0 !important;
         }
         html, body {
@@ -250,7 +258,7 @@ export function BarcodePanel() {
   const [sep, setSep] = useState('|')
   const [format, setFormat] = useState<'CODE128' | 'CODE39'>('CODE128')
   const [paperKey, setPaperKey] = useState<string>('58x40')
-  /** 프리셋은 가로×세로 순; 실제 스티커 방향이 다르면 체크해 인쇄·미리보기 모두 동일하게 회전 */
+  /** 드롭다운 가로×세로와 실제 롤·드라이버 방향이 다를 때만 뒤집기 (기본은 프리셋 순서 그대로) */
   const [swapPrintAxes, setSwapPrintAxes] = useState(false)
 
   const [items, setItems] = useState<Item[]>([])
@@ -552,7 +560,7 @@ export function BarcodePanel() {
         dangerouslySetInnerHTML={{
           __html: `
 @media print {
-  @page { margin: 0 !important; size: ${printDims.widthMm}mm ${printDims.heightMm}mm; }
+  @page { margin: 0 !important; ${pageSizeRule(printDims.widthMm, printDims.heightMm)} }
   html, body {
     width: ${printDims.widthMm}mm !important;
     min-height: ${printDims.heightMm}mm !important;
@@ -680,13 +688,14 @@ export function BarcodePanel() {
               className="mt-0.5 rounded border-slate-300 shrink-0"
             />
             <span>
-              가로·세로 바꿔 인쇄 (스티커가 세로 방향이거나 롤이 90° 돌아간 경우)
+              가로·세로(mm) 뒤집기 — 인쇄가 90° 틀어지면 체크
             </span>
           </label>
           <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-            실제 라벨 스티커와 같은 크기를 고르세요. 인쇄 창이 뜨면 <strong className="text-slate-700">용지 크기</strong>를
-            위 선택값(체크 시 {printDims.widthMm}×{printDims.heightMm}mm)과 같게 맞추고,{' '}
-            <strong className="text-slate-700">배율 100%</strong>(페이지에 맞춤·축소 끔)으로 두면 크기가 가장 잘 맞습니다.
+            실제 라벨과 같은 크기를 고르세요. 인쇄 창에서 <strong className="text-slate-700">용지</strong>{' '}
+            {printDims.widthMm}×{printDims.heightMm}mm, <strong className="text-slate-700">배율 100%</strong>,{' '}
+            <strong className="text-slate-700">방향: 가로(랜드스케이프)</strong>를 선택하세요. 위 옵션은 CSS에 가로/세로 방향을
+            명시해 두었습니다. 그래도 세로로만 나오면 위 체크를 켜 보거나, 프린터 속성의 용지 방향을 바꿔 보세요.
           </p>
         </div>
       </div>
