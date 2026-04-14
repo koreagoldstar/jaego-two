@@ -44,6 +44,91 @@ function escapeHtml(input: string): string {
     .replace(/'/g, '&#39;')
 }
 
+/** 라벨 높이(mm)에서 본문·여백을 제외한 바코드 이미지 최대 높이 */
+function labelBarcodeMaxHeightMm(heightMm: number): number {
+  const pad = 1.5
+  const textReserve = Math.min(14, heightMm * 0.35)
+  return Math.max(6, heightMm - textReserve - pad * 2)
+}
+
+/** iframe 인쇄 문서용 — @page·html·body를 모두 동일 mm로 맞춰 드라이버·브라우저 축소를 줄임 */
+function buildPrintIframeStyles(widthMm: number, heightMm: number): string {
+  const pad = 1.5
+  const barcodeMaxMm = labelBarcodeMaxHeightMm(heightMm)
+  return `
+      @page {
+        size: ${widthMm}mm ${heightMm}mm;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      html {
+        margin: 0;
+        padding: 0;
+        width: ${widthMm}mm;
+        height: ${heightMm}mm;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        width: ${widthMm}mm;
+        min-height: ${heightMm}mm;
+        height: ${heightMm}mm;
+        background: #fff;
+      }
+      .label {
+        width: ${widthMm}mm;
+        height: ${heightMm}mm;
+        min-height: ${heightMm}mm;
+        box-sizing: border-box;
+        padding: ${pad}mm;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35mm;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+      }
+      .label:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .caption {
+        margin: 0;
+        font-size: 6.5pt;
+        line-height: 1.05;
+        text-align: center;
+        max-width: 100%;
+        flex-shrink: 0;
+      }
+      .meta {
+        margin: 0;
+        font-size: 5.8pt;
+        line-height: 1.05;
+        text-align: center;
+        max-width: 100%;
+        word-break: break-all;
+        flex-shrink: 0;
+      }
+      .barcode {
+        display: block;
+        margin: 0 auto;
+        flex: 0 1 auto;
+        max-width: calc(${widthMm}mm - ${pad * 2}mm);
+        max-height: ${barcodeMaxMm}mm;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+      }
+  `
+}
+
 function BarcodeStrip({
   payload,
   format,
@@ -294,6 +379,7 @@ export function BarcodePanel() {
     () => LABEL_PRESETS.find(p => p.key === paperKey) ?? LABEL_PRESETS[0],
     [paperKey]
   )
+  const printBarcodeMaxHeightMm = useMemo(() => labelBarcodeMaxHeightMm(paperPreset.heightMm), [paperPreset.heightMm])
   const canPrint = mode === 'manual' ? !!manualPayload : validItemRows.length > 0
   const canDownload = canPrint
 
@@ -368,48 +454,7 @@ export function BarcodePanel() {
   <head>
     <meta charset="utf-8" />
     <title>Barcode Print</title>
-    <style>
-      @page { size: ${paperPreset.widthMm}mm ${paperPreset.heightMm}mm; margin: 0; }
-      html, body { margin: 0; padding: 0; background: #fff; }
-      .label {
-        width: ${paperPreset.widthMm}mm;
-        height: ${paperPreset.heightMm}mm;
-        box-sizing: border-box;
-        padding: 1mm;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.6mm;
-        overflow: hidden;
-        page-break-after: always;
-        break-after: page;
-      }
-      .label:last-child {
-        page-break-after: auto;
-        break-after: auto;
-      }
-      .caption {
-        margin: 0;
-        font-size: 7pt;
-        line-height: 1.1;
-        text-align: center;
-        max-width: 100%;
-      }
-      .meta {
-        margin: 0;
-        font-size: 6.2pt;
-        line-height: 1.1;
-        text-align: center;
-        max-width: 100%;
-        word-break: break-all;
-      }
-      .barcode {
-        width: 96%;
-        height: auto;
-        max-height: ${Math.max(12, paperPreset.heightMm - 14)}mm;
-      }
-    </style>
+    <style>${buildPrintIframeStyles(paperPreset.widthMm, paperPreset.heightMm)}</style>
   </head>
   <body>${htmlLabels}</body>
 </html>`)
@@ -451,7 +496,13 @@ export function BarcodePanel() {
         dangerouslySetInnerHTML={{
           __html: `
 @media print {
-  @page { margin: 0; size: ${paperPreset.widthMm}mm ${paperPreset.heightMm}mm; }
+  @page { margin: 0 !important; size: ${paperPreset.widthMm}mm ${paperPreset.heightMm}mm; }
+  html, body {
+    width: ${paperPreset.widthMm}mm !important;
+    min-height: ${paperPreset.heightMm}mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
   body * { visibility: hidden !important; }
   #barcode-print-area, #barcode-print-area * { visibility: visible !important; }
   #barcode-print-area {
@@ -459,6 +510,7 @@ export function BarcodePanel() {
     left: 0 !important;
     top: 0 !important;
     width: ${paperPreset.widthMm}mm !important;
+    min-height: ${paperPreset.heightMm}mm !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: center !important;
@@ -467,13 +519,15 @@ export function BarcodePanel() {
     background: white !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    box-sizing: border-box !important;
   }
   #barcode-print-area .barcode-print-label {
     width: ${paperPreset.widthMm}mm !important;
     height: ${paperPreset.heightMm}mm !important;
     min-height: ${paperPreset.heightMm}mm !important;
-    padding: 1mm !important;
-    gap: 0.5mm !important;
+    max-height: ${paperPreset.heightMm}mm !important;
+    padding: 1.5mm !important;
+    gap: 0.35mm !important;
     box-sizing: border-box !important;
     overflow: hidden !important;
     page-break-after: always !important;
@@ -489,12 +543,16 @@ export function BarcodePanel() {
   }
   #barcode-print-area .barcode-print-label p {
     margin: 0 !important;
-    line-height: 1.1 !important;
+    line-height: 1.05 !important;
   }
   #barcode-print-area canvas {
-    width: 96% !important;
+    display: block !important;
+    margin: 0 auto !important;
+    width: auto !important;
     height: auto !important;
-    max-height: ${Math.max(12, paperPreset.heightMm - 14)}mm !important;
+    max-width: calc(${paperPreset.widthMm}mm - 3mm) !important;
+    max-height: ${printBarcodeMaxHeightMm}mm !important;
+    object-fit: contain !important;
   }
 }
 `,
@@ -546,7 +604,7 @@ export function BarcodePanel() {
           </select>
         </div>
         <div>
-          <label className="block text-sm text-slate-600 mb-1">Xprinter 용지</label>
+          <label className="block text-sm text-slate-600 mb-1">라벨 용지 크기 (가로×세로 mm)</label>
           <select
             value={paperKey}
             onChange={e => setPaperKey(e.target.value)}
@@ -558,8 +616,12 @@ export function BarcodePanel() {
               </option>
             ))}
           </select>
+          <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+            실제 라벨 스티커와 같은 크기를 고르세요. 인쇄 창이 뜨면 <strong className="text-slate-700">용지 크기</strong>를
+            여기와 같게 맞추고, <strong className="text-slate-700">배율 100%</strong>(페이지에 맞춤·축소 끔)으로 두면 크기가
+            가장 잘 맞습니다.
+          </p>
         </div>
-        <p className="text-xs text-slate-500">미리보기는 크게, 실제 인쇄는 선택 용지 크기에 맞춰 출력됩니다.</p>
       </div>
 
       {mode === 'items' ? (
@@ -739,7 +801,7 @@ export function BarcodePanel() {
         </button>
       </div>
       <p className="text-xs text-slate-500 text-center">
-        인쇄 시 선택한 용지 기준으로 1라벨씩 출력됩니다.
+        인쇄 미리보기에서 레이아웃이 어긋나면 Windows 프린터 속성의 용지(예: 58×40mm)와 위에서 고른 mm가 같은지 확인하세요.
       </p>
     </div>
   )
