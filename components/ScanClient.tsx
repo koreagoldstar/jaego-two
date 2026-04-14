@@ -34,7 +34,7 @@ export function ScanClient() {
       <BarcodeCamera
         onDecode={onDecode}
         initialStatus="카메라 시작 중…"
-        videoClassName="w-full max-h-[50vh] object-cover"
+        videoClassName="w-full max-h-[50vh] object-contain bg-black"
       />
       {hint && <p className="text-sm text-red-600 px-1">{hint}</p>}
     </div>

@@ -149,7 +149,7 @@ export function MoveStockClient() {
         카메라로 비추거나, 무선 스캐너로 찍으면 품목이 잡힙니다. 그다음 수량·입고/출고만 누르면 됩니다.
       </p>
 
-      <BarcodeCamera onDecode={resolveBarcode} videoClassName="w-full max-h-[min(38vh,280px)] object-cover" />
+      <BarcodeCamera onDecode={resolveBarcode} videoClassName="w-full max-h-[min(38vh,280px)] object-contain bg-black" />
 
       {scanLine && (
         <p className="text-center text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-100 rounded-xl py-2 px-3">
