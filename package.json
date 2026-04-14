@@ -18,7 +18,8 @@
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "lucide-react": "^0.400.0",
-    "jsbarcode": "^3.11.6"
+    "jsbarcode": "^3.11.6",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "typescript": "^5",
@@ -30,6 +31,7 @@
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
-    "@types/jsbarcode": "^3.11.4"
+    "@types/jsbarcode": "^3.11.4",
+    "@types/qrcode": "^1.5.5"
   }
 }

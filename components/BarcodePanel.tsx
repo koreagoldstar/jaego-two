@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import JsBarcode from 'jsbarcode'
+import QRCode from 'qrcode'
 import { createClient } from '@/lib/supabase/client'
 import type { Item } from '@/lib/supabase/types'
 import { buildItemLabelVariants } from '@/lib/items/labelVariants'
@@ -156,6 +157,9 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number, barcodeMaxMm:
         max-height: ${barcodeMaxMm}mm;
         object-fit: contain;
         object-position: center center;
+        image-rendering: auto;
+      }
+      .barcode-crisp {
         image-rendering: crisp-edges;
       }
       @media print {
@@ -182,6 +186,8 @@ function sanitizeFilePart(s: string): string {
   return s.slice(0, 48).replace(/[/\\?%*:|"<>]/g, '-').trim() || 'item'
 }
 
+type CodeFormat = 'CODE128' | 'CODE39' | 'QR'
+
 function BarcodeStrip({
   payload,
   format,
@@ -191,7 +197,7 @@ function BarcodeStrip({
   paperHeightMm = 40,
 }: {
   payload: string
-  format: 'CODE128' | 'CODE39'
+  format: CodeFormat
   caption?: string
   metaLines?: string[]
   showEncodingLine?: boolean
@@ -209,6 +215,20 @@ function BarcodeStrip({
     const canvas = ref.current
     const p = normalizeBarcodePayload(payload)
     if (!canvas || !p) return
+
+    if (format === 'QR') {
+      const ctx = canvas.getContext('2d')
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
+      const side = Math.min(280, Math.max(96, Math.round(paperHeightMm * 6)))
+      void QRCode.toCanvas(canvas, p, {
+        width: side,
+        margin: 2,
+        errorCorrectionLevel: 'M',
+        color: { dark: '#000000', light: '#ffffff' },
+      }).catch(() => {})
+      return
+    }
+
     try {
       const ctx = canvas.getContext('2d')
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -236,7 +256,7 @@ function BarcodeStrip({
     } catch {
       /* invalid */
     }
-  }, [payload, format, barcodeHeight, compactLabel])
+  }, [payload, format, barcodeHeight, compactLabel, paperHeightMm])
 
   return (
     <div
@@ -265,10 +285,18 @@ function BarcodeStrip({
       <canvas
         ref={ref}
         className="max-w-full h-auto"
-        style={{
-          width: 'min(96%, 560px)',
-          maxHeight: compactLabel ? '84px' : '130px',
-        }}
+        style={
+          format === 'QR'
+            ? {
+                width: `${Math.min(280, Math.max(96, Math.round(paperHeightMm * 6)))}px`,
+                height: `${Math.min(280, Math.max(96, Math.round(paperHeightMm * 6)))}px`,
+                maxHeight: 'min(40vh, 280px)',
+              }
+            : {
+                width: 'min(96%, 560px)',
+                maxHeight: compactLabel ? '84px' : '130px',
+              }
+        }
       />
     </div>
   )
@@ -279,7 +307,7 @@ export function BarcodePanel() {
   const [shPrefix, setShPrefix] = useState('')
   const [serial, setSerial] = useState('')
   const [sep, setSep] = useState('|')
-  const [format, setFormat] = useState<'CODE128' | 'CODE39'>('CODE128')
+  const [format, setFormat] = useState<CodeFormat>('CODE128')
   const [paperKey, setPaperKey] = useState<string>('58x40')
 
   const [items, setItems] = useState<Item[]>([])
@@ -377,21 +405,53 @@ export function BarcodePanel() {
 
   const drawToBlob = useCallback(
     (payload: string): Promise<Blob | null> => {
+      const p = normalizeBarcodePayload(payload)
+      if (!p) return Promise.resolve(null)
+
+      if (format === 'QR') {
+        return (async () => {
+          const canvas = document.createElement('canvas')
+          try {
+            await QRCode.toCanvas(canvas, p, {
+              width: 360,
+              margin: 2,
+              errorCorrectionLevel: 'H',
+              color: { dark: '#000000', light: '#ffffff' },
+            })
+            return await new Promise<Blob | null>(resolve => {
+              canvas.toBlob(blob => resolve(blob), 'image/png')
+            })
+          } catch {
+            return null
+          }
+        })()
+      }
+
       return new Promise(resolve => {
         const canvas = document.createElement('canvas')
         try {
-          const p = normalizeBarcodePayload(payload)
-          if (!p) {
-            resolve(null)
-            return
+          try {
+            JsBarcode(canvas, p, {
+              format,
+              width: 2,
+              height: 100,
+              displayValue: true,
+              margin: 10,
+            })
+          } catch {
+            if (format === 'CODE39') {
+              JsBarcode(canvas, p, {
+                format: 'CODE128',
+                width: 2,
+                height: 100,
+                displayValue: true,
+                margin: 10,
+              })
+            } else {
+              resolve(null)
+              return
+            }
           }
-          JsBarcode(canvas, p, {
-            format,
-            width: 2,
-            height: 100,
-            displayValue: true,
-            margin: 10,
-          })
           canvas.toBlob(b => resolve(b), 'image/png')
         } catch {
           resolve(null)
@@ -402,11 +462,10 @@ export function BarcodePanel() {
   )
 
   /**
-   * 인쇄 iframe 전용 — 203dpi 슬롯 안에서 막대를 최대한 두껍게(모듈 폭 3→2→1 시도),
-   * ISO 쿼트존(여백) 확보, 축소 시 선명 보간으로 스캔 인식률 개선.
+   * 인쇄 iframe 전용 — 1D: 203dpi·쿼트존·선명 축소. QR: 슬롯에 맞는 정사각 고해상도.
    */
   const drawToDataUrlForPrint = useCallback(
-    (payload: string, labelWidthMm: number, labelHeightMm: number): string | null => {
+    async (payload: string, labelWidthMm: number, labelHeightMm: number): Promise<string | null> => {
       const clean = normalizeBarcodePayload(payload)
       if (!clean) return null
 
@@ -414,6 +473,21 @@ export function BarcodePanel() {
       const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm)
       const maxWPx = Math.max(64, Math.round((labelWidthMm - padMm * 2) * DPMM_203))
       const maxHPx = Math.max(40, Math.round(barcodeMaxMm * DPMM_203))
+
+      if (format === 'QR') {
+        const side = Math.max(128, Math.round(Math.min(maxWPx, maxHPx)))
+        try {
+          return await QRCode.toDataURL(clean, {
+            width: side,
+            margin: 2,
+            errorCorrectionLevel: 'H',
+            color: { dark: '#000000', light: '#ffffff' },
+          })
+        } catch {
+          return null
+        }
+      }
+
       const barHeight = Math.min(220, Math.max(40, Math.floor(maxHPx * 0.88)))
       const quietPx = Math.max(16, Math.round(maxWPx * 0.07))
 
@@ -454,7 +528,7 @@ export function BarcodePanel() {
 
       try {
         try {
-          draw(format)
+          draw(format as 'CODE128' | 'CODE39')
         } catch {
           if (format === 'CODE39') draw('CODE128')
           else throw new Error('barcode')
@@ -505,7 +579,7 @@ export function BarcodePanel() {
   const hMm = paperPreset.heightMm
   const printBarcodeMaxHeightMm = useMemo(() => labelBarcodeMaxHeightMm(hMm), [hMm])
 
-  function printBarcode() {
+  async function printBarcode() {
     if (mode === 'manual' && !manualPayload) return
     if (mode === 'items' && validItemRows.length === 0) return
 
@@ -527,24 +601,23 @@ export function BarcodePanel() {
             payload,
           }))
 
-    const htmlLabels = labels
-      .map(label => {
-        const dataUrl = drawToDataUrlForPrint(label.payload, wMm, hMm)
-        if (!dataUrl) return ''
-        const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
-        const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
-        return `
+    const parts: string[] = []
+    for (const label of labels) {
+      const dataUrl = await drawToDataUrlForPrint(label.payload, wMm, hMm)
+      if (!dataUrl) continue
+      const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
+      const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
+      parts.push(`
           <section class="label">
             ${captionHtml}
             ${metaHtml}
             <div class="barcode-wrap">
-              <img class="barcode" src="${dataUrl}" alt="" />
+              <img class="barcode${format !== 'QR' ? ' barcode-crisp' : ''}" src="${dataUrl}" alt="" />
             </div>
           </section>
-        `
-      })
-      .filter(Boolean)
-      .join('')
+        `)
+    }
+    const htmlLabels = parts.join('')
 
     if (!htmlLabels) return
 
@@ -650,12 +723,16 @@ export function BarcodePanel() {
           <label className="block text-sm text-slate-600 mb-1">포맷</label>
           <select
             value={format}
-            onChange={e => setFormat(e.target.value as 'CODE128' | 'CODE39')}
+            onChange={e => setFormat(e.target.value as CodeFormat)}
             className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
           >
-            <option value="CODE128">CODE128 (권장)</option>
+            <option value="CODE128">CODE128 (1D 바코드)</option>
             <option value="CODE39">CODE39</option>
+            <option value="QR">QR코드 (2D·카메라 스캔)</option>
           </select>
+          <p className="text-xs text-slate-500 mt-1 max-w-md">
+            QR은 같은 값도 패턴이 커서 라벨에 잘 보이고, 휴대폰 카메라로 읽기 쉽습니다. 레이저 1D 스캐너만 있으면 CODE128을 쓰세요.
+          </p>
         </div>
         <div>
           <label className="block text-sm text-slate-600 mb-1">라벨 용지 (가로×세로 mm)</label>
@@ -760,7 +837,7 @@ export function BarcodePanel() {
         <>
           <p className="text-sm text-slate-600">
             SH·시리얼을 넣으면 <code className="text-xs bg-slate-100 px-1 rounded">{sep || '|'}</code> 로 이어
-            CODE128/CODE39 바코드를 만듭니다.
+            CODE128/CODE39 또는 QR코드로 만듭니다.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -836,7 +913,7 @@ export function BarcodePanel() {
         <button
           type="button"
           disabled={!canPrint}
-          onClick={printBarcode}
+          onClick={() => void printBarcode()}
           className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 text-white font-medium py-3 shadow-sm disabled:opacity-40 active:scale-[0.99]"
         >
           <Printer className="w-5 h-5 shrink-0" aria-hidden />
