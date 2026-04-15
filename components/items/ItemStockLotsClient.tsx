@@ -98,9 +98,7 @@ export function ItemStockLotsClient({ itemId, lots }: Props) {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-3 space-y-2">
-        <p className="text-xs font-medium text-slate-600">
-          입고 추가 (날짜·시간을 바꿀 수 있습니다) · 아래 목록에서 입고별로 일부만 빼거나 통째로 삭제할 수 있습니다
-        </p>
+        <p className="text-xs font-medium text-slate-600">재고 추가 (입고일·메모 지정)</p>
         <form id="add-lot-form" action={fd => void onAdd(fd)} className="grid gap-2 sm:grid-cols-2">
           <label className="text-xs text-slate-500 sm:col-span-2">
             수량
@@ -137,7 +135,7 @@ export function ItemStockLotsClient({ itemId, lots }: Props) {
             className="sm:col-span-2 inline-flex items-center justify-center gap-1 rounded-lg bg-slate-800 text-white text-sm font-medium py-2 hover:bg-slate-900 disabled:opacity-50"
           >
             {busy === 'add' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            입고 단위 추가
+            재고 추가
           </button>
         </form>
       </div>
@@ -215,29 +213,27 @@ export function ItemStockLotsClient({ itemId, lots }: Props) {
                       </p>
                       {lot.note ? <p className="text-xs text-slate-600 mt-1 break-all">{lot.note}</p> : null}
                     </div>
-                    <div className="flex shrink-0 gap-1">
+                    <div className="flex shrink-0 flex-wrap gap-1 justify-end">
                       <button
                         type="button"
                         onClick={() => setEditingId(lot.id)}
-                        className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-                        title="수정"
-                        aria-label="이 입고 수정"
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                       >
-                        <Pencil className="w-4 h-4" />
+                        <Pencil className="w-3.5 h-3.5" />
+                        수정
                       </button>
                       <button
                         type="button"
                         disabled={busy === `del-${lot.id}`}
                         onClick={() => void onDelete(lot.id, lot.quantity)}
-                        className="p-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                        title="이 입고 전체 삭제"
-                        aria-label="이 입고 전체 삭제"
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                       >
                         {busy === `del-${lot.id}` ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         )}
+                        삭제
                       </button>
                     </div>
                   </div>

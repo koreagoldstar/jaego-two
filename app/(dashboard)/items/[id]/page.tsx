@@ -3,8 +3,8 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Item, ItemStockLot } from '@/lib/supabase/types'
 import { buildItemLabelVariants } from '@/lib/items/labelVariants'
+import { ItemStockLegacyClient } from '@/components/items/ItemStockLegacyClient'
 import { ItemStockLotsClient } from '@/components/items/ItemStockLotsClient'
-import { StockLotsMigrationNotice } from '@/components/items/StockLotsMigrationNotice'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { Pencil } from 'lucide-react'
 
@@ -70,21 +70,16 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
 
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-slate-900">입고 단위 (날짜별)</h2>
+          <h2 className="text-base font-semibold text-slate-900">재고 수량</h2>
           <span className="text-xs text-slate-500">합계 {item.quantity}개</span>
         </div>
         {lotsLoadError && (
           <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">{lotsLoadError}</p>
         )}
         {lotsTableMissing ? (
-          <StockLotsMigrationNotice errorMessage={lotsErr?.message ?? null} />
+          <ItemStockLegacyClient itemId={item.id} quantity={item.quantity} />
         ) : (
-          <>
-            <p className="text-xs text-slate-500">
-              각 입고마다 날짜가 다르게 표시됩니다. 삭제하면 해당 수량만 재고에서 빠집니다. 입·출고 화면에서 출고 시 오래된 입고부터 차감됩니다.
-            </p>
-            <ItemStockLotsClient itemId={item.id} lots={lots} />
-          </>
+          <ItemStockLotsClient itemId={item.id} lots={lots} />
         )}
       </div>
 
