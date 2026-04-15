@@ -3,18 +3,20 @@
 import {
   addItemQuantityLegacy,
   clearItemQuantityLegacy,
-  subtractItemQuantityLegacy,
+  deleteItemStockByItemQrLegacy,
 } from '@/app/(dashboard)/items/[id]/itemStockLegacyActions'
-import { Loader2, Minus, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState } from 'react'
 
 type Props = {
   itemId: string
   quantity: number
+  /** 품목에 등록된 QR — 삭제 시 이 값과 일치해야 함 */
+  itemBarcode: string | null
 }
 
-export function ItemStockLegacyClient({ itemId, quantity }: Props) {
+export function ItemStockLegacyClient({ itemId, quantity, itemBarcode }: Props) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -33,15 +35,17 @@ export function ItemStockLegacyClient({ itemId, quantity }: Props) {
     [itemId, router]
   )
 
-  const onSubtract = useCallback(
+  const onDeleteByQr = useCallback(
     async (formData: FormData) => {
-      setBusy('sub')
-      const res = await subtractItemQuantityLegacy(itemId, formData)
+      if (!window.confirm('품목에 등록된 QR과 같으면 보유 재고를 0으로 만듭니다. 계속할까요?')) return
+      setBusy('del-qr')
+      const res = await deleteItemStockByItemQrLegacy(itemId, formData)
       setBusy(null)
       if (!res.ok) {
         alert(res.error)
         return
       }
+      ;(document.getElementById('legacy-delete-qr-form') as HTMLFormElement | null)?.reset()
       router.refresh()
     },
     [itemId, router]
@@ -59,8 +63,50 @@ export function ItemStockLegacyClient({ itemId, quantity }: Props) {
     router.refresh()
   }, [itemId, router])
 
+  const registered = (itemBarcode ?? '').trim()
+
   return (
     <div className="space-y-4">
+      <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 space-y-2">
+        <p className="text-xs font-medium text-amber-900">QR로 재고 삭제 (레거시)</p>
+        <p className="text-[11px] text-amber-800/90">
+          입고 단위 DB가 없을 때는 품목에 등록된 QR과 일치하면 재고 전체를 0으로 맞춥니다. 입고별 삭제는 007·009 마이그레이션 후 입고 단위 화면을 쓰세요.
+        </p>
+        {registered ? (
+          <p className="text-[11px] text-slate-600 break-all">
+            등록된 품목 QR: <span className="font-mono">{registered}</span>
+          </p>
+        ) : (
+          <p className="text-[11px] text-red-700">품목에 QR이 없습니다. 품목 수정에서 QR을 넣으세요.</p>
+        )}
+        <form
+          id="legacy-delete-qr-form"
+          action={fd => void onDeleteByQr(fd)}
+          className="flex flex-wrap items-end gap-2"
+        >
+          <label className="text-xs text-amber-900 min-w-[12rem] flex-1">
+            확인용 QR
+            <input
+              name="delete_qr"
+              type="text"
+              autoComplete="off"
+              disabled={!registered || quantity < 1}
+              className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2 py-1.5 text-sm disabled:opacity-50"
+              placeholder="스캔 또는 직접 입력"
+              required
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={busy === 'del-qr' || !registered || quantity < 1}
+            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50"
+          >
+            {busy === 'del-qr' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            재고 0으로
+          </button>
+        </form>
+      </div>
+
       <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-3 space-y-2">
         <p className="text-xs font-medium text-slate-600">재고 추가</p>
         <form id="legacy-add-form" action={fd => void onAdd(fd)} className="flex flex-wrap items-end gap-2">
@@ -103,28 +149,6 @@ export function ItemStockLegacyClient({ itemId, quantity }: Props) {
               전부 삭제
             </button>
           </div>
-          <form action={fd => void onSubtract(fd)} className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 border border-slate-100 px-2 py-2">
-            <label className="text-[11px] text-slate-600">
-              그중
-              <input
-                name="subtract_qty"
-                type="number"
-                min={1}
-                max={quantity}
-                defaultValue={Math.min(1, quantity)}
-                className="mx-1 w-16 rounded border border-slate-200 bg-white px-1.5 py-1 text-sm tabular-nums"
-              />
-              개만 빼기
-            </label>
-            <button
-              type="submit"
-              disabled={busy === 'sub'}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-50"
-            >
-              {busy === 'sub' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Minus className="w-3.5 h-3.5" />}
-              차감
-            </button>
-          </form>
         </div>
       ) : (
         <p className="text-sm text-slate-500">현재 재고가 0개입니다. 위에서 추가하세요.</p>

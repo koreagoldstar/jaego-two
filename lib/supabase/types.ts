@@ -52,6 +52,8 @@ export type ItemStockLot = {
   user_id: string
   item_id: string
   quantity: number
+  /** 입고 단위별 스캔/QR 값(비어 있으면 QR 삭제 불가, 목록에서만 삭제) */
+  lot_code: string | null
   note: string | null
   created_at: string
 }

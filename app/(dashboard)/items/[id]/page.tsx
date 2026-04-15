@@ -30,7 +30,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
 
   const { data: lotRows, error: lotsErr } = await supabase
     .from('item_stock_lots')
-    .select('id, user_id, item_id, quantity, note, created_at')
+    .select('id, user_id, item_id, quantity, lot_code, note, created_at')
     .eq('item_id', params.id)
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
@@ -77,7 +77,11 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
           <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">{lotsLoadError}</p>
         )}
         {lotsTableMissing ? (
-          <ItemStockLegacyClient itemId={item.id} quantity={item.quantity} />
+          <ItemStockLegacyClient
+            itemId={item.id}
+            quantity={item.quantity}
+            itemBarcode={item.barcode_code ?? null}
+          />
         ) : (
           <ItemStockLotsClient itemId={item.id} lots={lots} />
         )}

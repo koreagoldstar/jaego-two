@@ -46,6 +46,7 @@ export async function createItemAction(formData: FormData) {
   if (!name) redirect('/items/new?error=' + encodeURIComponent('이름을 입력하세요'))
 
   const barcode_code = String(formData.get('barcode_code') ?? '').trim()
+  const resolvedBarcode = barcode_code || generateBarcodeValue()
   const quantity = Math.max(0, parseInt(String(formData.get('quantity') ?? '0'), 10) || 0)
   const location = String(formData.get('location') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
@@ -56,7 +57,7 @@ export async function createItemAction(formData: FormData) {
       user_id: user.id,
       name,
       sh: null,
-      barcode_code: barcode_code || generateBarcodeValue(),
+      barcode_code: resolvedBarcode,
       serial_number: null,
       quantity: 0,
       location: location || null,
@@ -74,6 +75,7 @@ export async function createItemAction(formData: FormData) {
       user_id: user.id,
       item_id: inserted.id,
       quantity,
+      lot_code: resolvedBarcode,
       note: '',
       created_at: inserted.created_at,
     })
@@ -160,7 +162,7 @@ export async function createItemsBatchAction(formData: FormData) {
   const { data: createdRows, error } = await supabase
     .from('items')
     .insert(rows)
-    .select('id, name, created_at')
+    .select('id, name, created_at, barcode_code')
 
   if (error) {
     redirect('/items/new?error=' + encodeURIComponent(error.message))
@@ -171,6 +173,7 @@ export async function createItemsBatchAction(formData: FormData) {
       user_id: user.id,
       item_id: row.id,
       quantity: quantityEach,
+      lot_code: (row.barcode_code ?? '').trim() || `lot-${row.id.slice(0, 8)}`,
       note: '',
       created_at: row.created_at,
     }))

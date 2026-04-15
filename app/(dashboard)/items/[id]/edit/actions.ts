@@ -16,6 +16,7 @@ export async function updateItemAction(itemId: string, formData: FormData) {
   if (!name) redirect(`/items/${itemId}/edit?error=` + encodeURIComponent('이름을 입력하세요'))
 
   const barcode_code = String(formData.get('barcode_code') ?? '').trim()
+  const resolvedBarcode = barcode_code || generateBarcodeValue()
   const quantity = Math.max(0, parseInt(String(formData.get('quantity') ?? '0'), 10) || 0)
   const location = String(formData.get('location') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
@@ -43,7 +44,7 @@ export async function updateItemAction(itemId: string, formData: FormData) {
       .update({
         name,
         sh: null,
-        barcode_code: barcode_code || generateBarcodeValue(),
+        barcode_code: resolvedBarcode,
         serial_number: null,
         quantity,
         location: location || null,
@@ -72,7 +73,7 @@ export async function updateItemAction(itemId: string, formData: FormData) {
     .update({
       name,
       sh: null,
-      barcode_code: barcode_code || generateBarcodeValue(),
+      barcode_code: resolvedBarcode,
       serial_number: null,
       location: location || null,
       description: description || '',
@@ -93,6 +94,7 @@ export async function updateItemAction(itemId: string, formData: FormData) {
         user_id: user.id,
         item_id: itemId,
         quantity,
+        lot_code: resolvedBarcode,
         note: '',
         created_at: meta.created_at,
       })
