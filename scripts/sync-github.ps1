@@ -1,6 +1,7 @@
 # GitHub와 동기화 (PowerShell)
+# 원격 저장소(공통): https://github.com/koreagoldstar/jaego-two — 집/사무실 PC 모두 이 URL만 사용
 # 저장소 루트에서: .\scripts\sync-github.ps1
-# 다른 PC에서 작업을 가져온 뒤 푸시까지: .\scripts\sync-github.ps1 -Push
+# 작업 전 가져오기 + 작업 후 올리기: .\scripts\sync-github.ps1 -Push
 param(
   [switch]$Push
 )
