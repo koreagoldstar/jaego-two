@@ -1,8 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
-import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
+import { isMissingTableError } from '@/lib/supabase/missingTable'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
+
+const TABLE_KEYS = [
+  'items',
+  'stock_transactions',
+  'inventory_events',
+  'item_stock_lots',
+  'project_usage_plans',
+] as const
 
 export async function GET() {
   const supabase = await createClient()
@@ -16,41 +24,65 @@ export async function GET() {
 
   const uid = user.id
 
-  const [items, stock_transactions, inventory_events, item_stock_lots, project_usage_plans] =
-    await Promise.all([
-      supabase.from('items').select('*').eq('user_id', uid),
-      supabase.from('stock_transactions').select('*').eq('user_id', uid),
-      supabase.from('inventory_events').select('*').eq('user_id', uid),
-      supabase.from('item_stock_lots').select('*').eq('user_id', uid),
-      supabase.from('project_usage_plans').select('*').eq('user_id', uid),
-    ])
+  const [
+    itemsRes,
+    stockTxRes,
+    invEventsRes,
+    lotsRes,
+    plansRes,
+  ] = await Promise.all([
+    supabase.from('items').select('*').eq('user_id', uid),
+    supabase.from('stock_transactions').select('*').eq('user_id', uid),
+    supabase.from('inventory_events').select('*').eq('user_id', uid),
+    supabase.from('item_stock_lots').select('*').eq('user_id', uid),
+    supabase.from('project_usage_plans').select('*').eq('user_id', uid),
+  ])
 
-  const lotsMissing =
-    item_stock_lots.error && isMissingItemStockLotsTable(item_stock_lots.error)
+  const responses = [itemsRes, stockTxRes, invEventsRes, lotsRes, plansRes]
+  const missingTables: string[] = []
+  let fatalError: string | null = null
 
-  const errs = [
-    items.error,
-    stock_transactions.error,
-    inventory_events.error,
-    lotsMissing ? null : item_stock_lots.error,
-    project_usage_plans.error,
-  ].filter(Boolean)
-
-  if (errs.length > 0) {
-    const msg = errs.map(e => e?.message).join('; ')
-    return NextResponse.json({ error: msg || 'Backup query failed' }, { status: 500 })
+  const rowData: Record<(typeof TABLE_KEYS)[number], unknown[]> = {
+    items: [],
+    stock_transactions: [],
+    inventory_events: [],
+    item_stock_lots: [],
+    project_usage_plans: [],
   }
 
-  const payload = {
+  TABLE_KEYS.forEach((key, i) => {
+    const res = responses[i]
+    if (!res.error) {
+      rowData[key] = res.data ?? []
+      return
+    }
+    if (isMissingTableError(res.error)) {
+      missingTables.push(key)
+      rowData[key] = []
+      return
+    }
+    fatalError = res.error.message ?? 'Backup query failed'
+  })
+
+  if (fatalError) {
+    return NextResponse.json({ error: fatalError }, { status: 500 })
+  }
+
+  const payload: Record<string, unknown> = {
     exportedAt: new Date().toISOString(),
     schemaVersion: 1,
     app: 'jaego-two',
-    items: items.data ?? [],
-    stock_transactions: stock_transactions.data ?? [],
-    inventory_events: inventory_events.data ?? [],
-    item_stock_lots: lotsMissing ? [] : (item_stock_lots.data ?? []),
-    item_stock_lots_note: lotsMissing ? 'table not migrated (007)' : undefined,
-    project_usage_plans: project_usage_plans.data ?? [],
+    items: rowData.items,
+    stock_transactions: rowData.stock_transactions,
+    inventory_events: rowData.inventory_events,
+    item_stock_lots: rowData.item_stock_lots,
+    project_usage_plans: rowData.project_usage_plans,
+  }
+
+  if (missingTables.length > 0) {
+    payload.missingTables = missingTables
+    payload.note =
+      '일부 테이블이 DB에 없어 빈 배열로 포함되었습니다. supabase/migrations 의 SQL을 Supabase에서 실행하면 채워집니다.'
   }
 
   const dateStr = new Date().toISOString().slice(0, 10)
