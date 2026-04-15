@@ -1,0 +1,17 @@
+---
+description: 작업 완료 후 Git 커밋·푸시·Vercel 배포까지 자동 수행
+alwaysApply: true
+---
+
+# 작업 완료 시 배포 (jaego-two)
+
+기능 수정·버그픽스·리팩터 등 **요청한 작업을 마치면** 아래를 **스스로 실행**한다. 사용자에게 “직접 하세요”만 남기지 않는다.
+
+1. `npm run build` 로 빌드가 통과하는지 확인한다.
+2. 변경이 있으면 **의미 있는 한 줄 메시지**로 `git add` 후 `git commit` 한다.
+3. `git push origin main` 으로 GitHub에 올린다.
+4. Vercel CLI가 가능하면 `npx vercel deploy --prod --yes` 로 프로덕션 배포한다. (저장소가 이미 Vercel에 연결된 경우 Git push만으로도 배포되지만, CLI로 완료 여부를 확인한다.)
+
+빌드 실패 시 커밋하지 않고 오류를 고친 뒤 다시 시도한다.
+
+선택: 한 번에 돌리려면 저장소 루트에서 `.\scripts\release.ps1 -Message "feat: 설명"` 을 사용할 수 있다.
