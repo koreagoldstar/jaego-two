@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -24,11 +25,14 @@ export async function GET() {
       supabase.from('project_usage_plans').select('*').eq('user_id', uid),
     ])
 
+  const lotsMissing =
+    item_stock_lots.error && isMissingItemStockLotsTable(item_stock_lots.error)
+
   const errs = [
     items.error,
     stock_transactions.error,
     inventory_events.error,
-    item_stock_lots.error,
+    lotsMissing ? null : item_stock_lots.error,
     project_usage_plans.error,
   ].filter(Boolean)
 
@@ -44,7 +48,8 @@ export async function GET() {
     items: items.data ?? [],
     stock_transactions: stock_transactions.data ?? [],
     inventory_events: inventory_events.data ?? [],
-    item_stock_lots: item_stock_lots.data ?? [],
+    item_stock_lots: lotsMissing ? [] : (item_stock_lots.data ?? []),
+    item_stock_lots_note: lotsMissing ? 'table not migrated (007)' : undefined,
     project_usage_plans: project_usage_plans.data ?? [],
   }
 

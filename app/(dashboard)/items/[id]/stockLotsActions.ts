@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
 
 /** `<input type="datetime-local">` 값 (타임존 없음) → ISO. 앱 기본 KST(+09:00)로 저장 */
@@ -37,7 +38,12 @@ export async function addItemStockLotAction(itemId: string, formData: FormData) 
     created_at,
   })
 
-  if (error) return { ok: false as const, error: error.message }
+  if (error) {
+    const msg = isMissingItemStockLotsTable(error)
+      ? '입고 단위 테이블이 없습니다. Supabase SQL Editor에서 supabase/migrations/007_item_stock_lots.sql 을 실행하세요.'
+      : error.message
+    return { ok: false as const, error: msg }
+  }
   revalidatePath(`/items/${itemId}`)
   revalidatePath('/items')
   return { ok: true as const }
@@ -67,7 +73,12 @@ export async function updateItemStockLotAction(
     .eq('item_id', itemId)
     .eq('user_id', user.id)
 
-  if (error) return { ok: false as const, error: error.message }
+  if (error) {
+    const msg = isMissingItemStockLotsTable(error)
+      ? '입고 단위 테이블이 없습니다. Supabase에서 007 마이그레이션을 실행하세요.'
+      : error.message
+    return { ok: false as const, error: msg }
+  }
   revalidatePath(`/items/${itemId}`)
   revalidatePath('/items')
   return { ok: true as const }
@@ -87,7 +98,12 @@ export async function deleteItemStockLotAction(itemId: string, lotId: string) {
     .eq('item_id', itemId)
     .eq('user_id', user.id)
 
-  if (error) return { ok: false as const, error: error.message }
+  if (error) {
+    const msg = isMissingItemStockLotsTable(error)
+      ? '입고 단위 테이블이 없습니다. Supabase에서 007 마이그레이션을 실행하세요.'
+      : error.message
+    return { ok: false as const, error: msg }
+  }
   revalidatePath(`/items/${itemId}`)
   revalidatePath('/items')
   return { ok: true as const }

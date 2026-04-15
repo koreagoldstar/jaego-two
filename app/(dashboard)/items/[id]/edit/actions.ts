@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { generateBarcodeValue } from '@/lib/items/codeGeneratorsServer'
+import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { redirect } from 'next/navigation'
 
 export async function updateItemAction(itemId: string, formData: FormData) {
@@ -30,14 +31,41 @@ export async function updateItemAction(itemId: string, formData: FormData) {
     redirect(`/items/${itemId}/edit?error=` + encodeURIComponent(metaErr?.message ?? '품목을 찾을 수 없습니다'))
   }
 
-  const { data: lotRows } = await supabase
+  const lotRes = await supabase
     .from('item_stock_lots')
     .select('quantity')
     .eq('item_id', itemId)
     .eq('user_id', user.id)
 
-  const lotSum = (lotRows ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0)
-  const effectiveSum = lotRows && lotRows.length > 0 ? lotSum : meta.quantity ?? 0
+  if (lotRes.error && isMissingItemStockLotsTable(lotRes.error)) {
+    const { error } = await supabase
+      .from('items')
+      .update({
+        name,
+        sh: null,
+        barcode_code: barcode_code || generateBarcodeValue(),
+        serial_number: null,
+        quantity,
+        location: location || null,
+        description: description || '',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', itemId)
+      .eq('user_id', user.id)
+
+    if (error) {
+      redirect(`/items/${itemId}/edit?error=` + encodeURIComponent(error.message))
+    }
+    redirect(`/items/${itemId}`)
+  }
+
+  if (lotRes.error) {
+    redirect(`/items/${itemId}/edit?error=` + encodeURIComponent(lotRes.error.message))
+  }
+
+  const lotRows = lotRes.data ?? []
+  const lotSum = lotRows.reduce((s, r) => s + (r.quantity ?? 0), 0)
+  const effectiveSum = lotRows.length > 0 ? lotSum : meta.quantity ?? 0
 
   const { error } = await supabase
     .from('items')

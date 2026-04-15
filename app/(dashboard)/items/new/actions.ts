@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { generateBarcodeValue } from '@/lib/items/codeGeneratorsServer'
+import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { redirect } from 'next/navigation'
 
 /** 입출고 이력 보조 테이블 — 실패해도 품목 등록 자체는 성공시키고 서버 로그만 남김 (throw 시 Digest 오류 페이지로 이어짐) */
@@ -77,7 +78,18 @@ export async function createItemAction(formData: FormData) {
       created_at: inserted.created_at,
     })
     if (lotErr) {
-      redirect('/items/new?error=' + encodeURIComponent(lotErr.message))
+      if (isMissingItemStockLotsTable(lotErr)) {
+        const { error: upErr } = await supabase
+          .from('items')
+          .update({ quantity })
+          .eq('id', inserted.id)
+          .eq('user_id', user.id)
+        if (upErr) {
+          redirect('/items/new?error=' + encodeURIComponent(upErr.message))
+        }
+      } else {
+        redirect('/items/new?error=' + encodeURIComponent(lotErr.message))
+      }
     }
   }
 
@@ -164,7 +176,17 @@ export async function createItemsBatchAction(formData: FormData) {
     }))
     const { error: lotErr } = await supabase.from('item_stock_lots').insert(lotRows)
     if (lotErr) {
-      redirect('/items/new?error=' + encodeURIComponent(lotErr.message))
+      if (isMissingItemStockLotsTable(lotErr)) {
+        for (const row of createdRows ?? []) {
+          await supabase
+            .from('items')
+            .update({ quantity: quantityEach })
+            .eq('id', row.id)
+            .eq('user_id', user.id)
+        }
+      } else {
+        redirect('/items/new?error=' + encodeURIComponent(lotErr.message))
+      }
     }
   }
 

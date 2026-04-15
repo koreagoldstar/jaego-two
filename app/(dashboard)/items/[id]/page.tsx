@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import type { Item, ItemStockLot } from '@/lib/supabase/types'
 import { buildItemLabelVariants } from '@/lib/items/labelVariants'
 import { ItemStockLotsClient } from '@/components/items/ItemStockLotsClient'
+import { StockLotsMigrationNotice } from '@/components/items/StockLotsMigrationNotice'
+import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { Pencil } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -26,14 +28,16 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
   const item = row as Item
   const labelRows = buildItemLabelVariants(item, '|')
 
-  const { data: lotRows } = await supabase
+  const { data: lotRows, error: lotsErr } = await supabase
     .from('item_stock_lots')
     .select('id, user_id, item_id, quantity, note, created_at')
     .eq('item_id', params.id)
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
-  const lots = (lotRows ?? []) as ItemStockLot[]
+  const lotsTableMissing = Boolean(lotsErr && isMissingItemStockLotsTable(lotsErr))
+  const lotsLoadError = lotsErr && !lotsTableMissing ? lotsErr.message : null
+  const lots = (lotsTableMissing ? [] : (lotRows ?? [])) as ItemStockLot[]
 
   return (
     <div className="space-y-4 max-w-lg">
@@ -69,10 +73,19 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
           <h2 className="text-base font-semibold text-slate-900">입고 단위 (날짜별)</h2>
           <span className="text-xs text-slate-500">합계 {item.quantity}개</span>
         </div>
-        <p className="text-xs text-slate-500">
-          각 입고마다 날짜가 다르게 표시됩니다. 삭제하면 해당 수량만 재고에서 빠집니다. 입·출고 화면에서 출고 시 오래된 입고부터 차감됩니다.
-        </p>
-        <ItemStockLotsClient itemId={item.id} lots={lots} />
+        {lotsLoadError && (
+          <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">{lotsLoadError}</p>
+        )}
+        {lotsTableMissing ? (
+          <StockLotsMigrationNotice />
+        ) : (
+          <>
+            <p className="text-xs text-slate-500">
+              각 입고마다 날짜가 다르게 표시됩니다. 삭제하면 해당 수량만 재고에서 빠집니다. 입·출고 화면에서 출고 시 오래된 입고부터 차감됩니다.
+            </p>
+            <ItemStockLotsClient itemId={item.id} lots={lots} />
+          </>
+        )}
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">

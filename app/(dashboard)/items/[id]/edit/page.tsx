@@ -64,6 +64,9 @@ export default async function EditItemPage({
             defaultValue={item.quantity}
             className="w-full rounded-xl border border-slate-200 px-3 py-2.5"
           />
+          <p className="mt-1.5 text-xs text-slate-500">
+            <strong>0</strong>으로 저장하면 재고를 비웁니다. 날짜별로 나눠 삭제하려면 품목 상세의「입고 단위」(DB 마이그레이션 007 적용 후)를 사용하세요.
+          </p>
         </div>
         <Field label="위치" name="location" defaultValue={item.location ?? ''} />
         <div>
