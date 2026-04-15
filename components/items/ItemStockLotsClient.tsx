@@ -4,9 +4,10 @@ import type { ItemStockLot } from '@/lib/supabase/types'
 import {
   addItemStockLotAction,
   deleteItemStockLotAction,
+  subtractItemStockLotAction,
   updateItemStockLotAction,
 } from '@/app/(dashboard)/items/[id]/stockLotsActions'
-import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Minus, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 
@@ -64,10 +65,24 @@ export function ItemStockLotsClient({ itemId, lots }: Props) {
   )
 
   const onDelete = useCallback(
-    async (lotId: string) => {
-      if (!window.confirm('이 입고 단위를 삭제할까요? 수량만큼 재고에서 빠집니다.')) return
-      setBusy(lotId)
+    async (lotId: string, qty: number) => {
+      if (!window.confirm(`이 입고(총 ${qty}개)를 통째로 삭제할까요? 재고에서 ${qty}개가 빠집니다.`)) return
+      setBusy(`del-${lotId}`)
       const res = await deleteItemStockLotAction(itemId, lotId)
+      setBusy(null)
+      if (!res.ok) {
+        alert(res.error)
+        return
+      }
+      router.refresh()
+    },
+    [itemId, router]
+  )
+
+  const onSubtract = useCallback(
+    async (lotId: string, formData: FormData) => {
+      setBusy(`sub-${lotId}`)
+      const res = await subtractItemStockLotAction(itemId, lotId, formData)
       setBusy(null)
       if (!res.ok) {
         alert(res.error)
@@ -83,7 +98,9 @@ export function ItemStockLotsClient({ itemId, lots }: Props) {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-3 space-y-2">
-        <p className="text-xs font-medium text-slate-600">입고 추가 (날짜·시간을 바꿀 수 있습니다)</p>
+        <p className="text-xs font-medium text-slate-600">
+          입고 추가 (날짜·시간을 바꿀 수 있습니다) · 아래 목록에서 입고별로 일부만 빼거나 통째로 삭제할 수 있습니다
+        </p>
         <form id="add-lot-form" action={fd => void onAdd(fd)} className="grid gap-2 sm:grid-cols-2">
           <label className="text-xs text-slate-500 sm:col-span-2">
             수량
@@ -189,37 +206,71 @@ export function ItemStockLotsClient({ itemId, lots }: Props) {
                   </div>
                 </form>
               ) : (
-                <div className="flex justify-between gap-2 items-start">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-slate-900 tabular-nums">{lot.quantity}개</p>
-                    <p className="text-xs text-slate-500">
-                      {new Date(lot.created_at).toLocaleString('ko-KR')}
-                    </p>
-                    {lot.note ? <p className="text-xs text-slate-600 mt-1 break-all">{lot.note}</p> : null}
+                <div className="space-y-2">
+                  <div className="flex justify-between gap-2 items-start">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900 tabular-nums">{lot.quantity}개</p>
+                      <p className="text-xs text-slate-500">
+                        {new Date(lot.created_at).toLocaleString('ko-KR')}
+                      </p>
+                      {lot.note ? <p className="text-xs text-slate-600 mt-1 break-all">{lot.note}</p> : null}
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(lot.id)}
+                        className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                        title="수정"
+                        aria-label="이 입고 수정"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy === `del-${lot.id}`}
+                        onClick={() => void onDelete(lot.id, lot.quantity)}
+                        className="p-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        title="이 입고 전체 삭제"
+                        aria-label="이 입고 전체 삭제"
+                      >
+                        {busy === `del-${lot.id}` ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 gap-1">
+                  <form
+                    action={fd => void onSubtract(lot.id, fd)}
+                    className="flex flex-wrap items-end gap-2 rounded-lg bg-slate-50 border border-slate-100 px-2 py-2"
+                  >
+                    <label className="text-[11px] text-slate-600 shrink-0">
+                      이 입고에서만
+                      <input
+                        name="subtract_qty"
+                        type="number"
+                        min={1}
+                        max={lot.quantity}
+                        defaultValue={Math.min(1, lot.quantity)}
+                        className="ml-1 w-16 rounded border border-slate-200 bg-white px-1.5 py-1 text-sm tabular-nums"
+                        aria-label="차감 수량"
+                      />
+                      개 빼기
+                    </label>
                     <button
-                      type="button"
-                      onClick={() => setEditingId(lot.id)}
-                      className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-                      aria-label="수정"
+                      type="submit"
+                      disabled={busy === `sub-${lot.id}` || lot.quantity < 1}
+                      className="inline-flex items-center gap-1 rounded-md bg-white border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-800 hover:bg-slate-100 disabled:opacity-50"
                     >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy === lot.id}
-                      onClick={() => void onDelete(lot.id)}
-                      className="p-2 rounded-lg border border-red-100 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      aria-label="삭제"
-                    >
-                      {busy === lot.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                      {busy === `sub-${lot.id}` ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
-                        <Trash2 className="w-4 h-4" />
+                        <Minus className="w-3.5 h-3.5" />
                       )}
+                      차감
                     </button>
-                  </div>
+                  </form>
                 </div>
               )}
             </li>

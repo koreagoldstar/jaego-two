@@ -108,3 +108,57 @@ export async function deleteItemStockLotAction(itemId: string, lotId: string) {
   revalidatePath('/items')
   return { ok: true as const }
 }
+
+/** 이 입고 줄에서만 수량만큼 빼기(전부 빼면 행 삭제) */
+export async function subtractItemStockLotAction(itemId: string, lotId: string, formData: FormData) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
+
+  const raw = String(formData.get('subtract_qty') ?? '').trim()
+  const n = Math.max(1, parseInt(raw, 10) || 0)
+  if (!Number.isFinite(n) || n < 1) {
+    return { ok: false as const, error: '차감 수량을 입력하세요' }
+  }
+
+  const { data: row, error: selErr } = await supabase
+    .from('item_stock_lots')
+    .select('id, quantity')
+    .eq('id', lotId)
+    .eq('item_id', itemId)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (selErr) {
+    const msg = isMissingItemStockLotsTable(selErr)
+      ? '입고 단위 테이블이 없습니다. Supabase에서 007 마이그레이션을 실행하세요.'
+      : selErr.message
+    return { ok: false as const, error: msg }
+  }
+  if (!row) return { ok: false as const, error: '입고 단위를 찾을 수 없습니다' }
+
+  const q = row.quantity ?? 0
+  if (n > q) return { ok: false as const, error: `이 입고에는 ${q}개만 있습니다` }
+
+  if (n === q) {
+    const { error } = await supabase
+      .from('item_stock_lots')
+      .delete()
+      .eq('id', lotId)
+      .eq('user_id', user.id)
+    if (error) return { ok: false as const, error: error.message }
+  } else {
+    const { error } = await supabase
+      .from('item_stock_lots')
+      .update({ quantity: q - n })
+      .eq('id', lotId)
+      .eq('user_id', user.id)
+    if (error) return { ok: false as const, error: error.message }
+  }
+
+  revalidatePath(`/items/${itemId}`)
+  revalidatePath('/items')
+  return { ok: true as const }
+}
