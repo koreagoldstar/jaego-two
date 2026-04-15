@@ -132,7 +132,8 @@ export function ItemsListClient({ items }: Props) {
                 <div className="min-w-0">
                   <p className="font-medium text-slate-900 truncate">{item.name}</p>
                   <p className="text-xs text-slate-500 truncate">
-                    {item.barcode_code ? `QR ${item.barcode_code}` : ''}
+                    등록 {new Date(item.created_at).toLocaleDateString('ko-KR')}
+                    {item.barcode_code ? ` · QR ${item.barcode_code}` : ''}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

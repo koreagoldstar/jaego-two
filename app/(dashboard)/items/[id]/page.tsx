@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import type { Item } from '@/lib/supabase/types'
+import type { Item, ItemStockLot } from '@/lib/supabase/types'
 import { buildItemLabelVariants } from '@/lib/items/labelVariants'
+import { ItemStockLotsClient } from '@/components/items/ItemStockLotsClient'
 import { Pencil } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +26,15 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
   const item = row as Item
   const labelRows = buildItemLabelVariants(item, '|')
 
+  const { data: lotRows } = await supabase
+    .from('item_stock_lots')
+    .select('id, user_id, item_id, quantity, note, created_at')
+    .eq('item_id', params.id)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+
+  const lots = (lotRows ?? []) as ItemStockLot[]
+
   return (
     <div className="space-y-4 max-w-lg">
       <div className="flex items-center justify-between gap-2">
@@ -44,10 +54,25 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
         <h1 className="text-xl font-bold text-slate-900">{item.name}</h1>
         <dl className="text-sm space-y-2">
           <Row label="수량" value={<span className="text-2xl font-semibold text-blue-600">{item.quantity}</span>} />
+          <Row
+            label="품목 등록일"
+            value={new Date(item.created_at).toLocaleString('ko-KR')}
+          />
           {item.barcode_code && <Row label="QR 스캔 코드" value={item.barcode_code} />}
           {item.location && <Row label="위치" value={item.location} />}
           {item.description && <Row label="메모" value={item.description} />}
         </dl>
+      </div>
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-slate-900">입고 단위 (날짜별)</h2>
+          <span className="text-xs text-slate-500">합계 {item.quantity}개</span>
+        </div>
+        <p className="text-xs text-slate-500">
+          각 입고마다 날짜가 다르게 표시됩니다. 삭제하면 해당 수량만 재고에서 빠집니다. 입·출고 화면에서 출고 시 오래된 입고부터 차감됩니다.
+        </p>
+        <ItemStockLotsClient itemId={item.id} lots={lots} />
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">

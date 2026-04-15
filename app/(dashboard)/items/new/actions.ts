@@ -57,15 +57,28 @@ export async function createItemAction(formData: FormData) {
       sh: null,
       barcode_code: barcode_code || generateBarcodeValue(),
       serial_number: null,
-      quantity,
+      quantity: 0,
       location: location || null,
       description: description || '',
     })
-    .select('id')
+    .select('id, created_at')
     .single()
 
   if (error) {
     redirect('/items/new?error=' + encodeURIComponent(error.message))
+  }
+
+  if (quantity > 0 && inserted?.id) {
+    const { error: lotErr } = await supabase.from('item_stock_lots').insert({
+      user_id: user.id,
+      item_id: inserted.id,
+      quantity,
+      note: '',
+      created_at: inserted.created_at,
+    })
+    if (lotErr) {
+      redirect('/items/new?error=' + encodeURIComponent(lotErr.message))
+    }
   }
 
   await logInventoryEvents(supabase, [
@@ -80,6 +93,7 @@ export async function createItemAction(formData: FormData) {
   ])
   redirect('/items')
 }
+
 
 const MAX_BATCH = 100
 
@@ -125,7 +139,7 @@ export async function createItemsBatchAction(formData: FormData) {
       sh: null,
       barcode_code: generateBarcodeValue(),
       serial_number: null,
-      quantity: quantityEach,
+      quantity: 0,
       location: location || null,
       description: description || '',
     })
@@ -134,10 +148,24 @@ export async function createItemsBatchAction(formData: FormData) {
   const { data: createdRows, error } = await supabase
     .from('items')
     .insert(rows)
-    .select('id, name, quantity')
+    .select('id, name, created_at')
 
   if (error) {
     redirect('/items/new?error=' + encodeURIComponent(error.message))
+  }
+
+  if (quantityEach > 0 && createdRows?.length) {
+    const lotRows = createdRows.map(row => ({
+      user_id: user.id,
+      item_id: row.id,
+      quantity: quantityEach,
+      note: '',
+      created_at: row.created_at,
+    }))
+    const { error: lotErr } = await supabase.from('item_stock_lots').insert(lotRows)
+    if (lotErr) {
+      redirect('/items/new?error=' + encodeURIComponent(lotErr.message))
+    }
   }
 
   await logInventoryEvents(
@@ -147,7 +175,7 @@ export async function createItemsBatchAction(formData: FormData) {
       item_id: row.id,
       event_type: 'item_create' as const,
       item_name: row.name,
-      quantity: row.quantity,
+      quantity: quantityEach,
       detail: '일괄 품목 추가',
     }))
   )

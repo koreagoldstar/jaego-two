@@ -19,6 +19,26 @@ export async function updateItemAction(itemId: string, formData: FormData) {
   const location = String(formData.get('location') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
 
+  const { data: meta, error: metaErr } = await supabase
+    .from('items')
+    .select('created_at, quantity')
+    .eq('id', itemId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (metaErr || !meta) {
+    redirect(`/items/${itemId}/edit?error=` + encodeURIComponent(metaErr?.message ?? '품목을 찾을 수 없습니다'))
+  }
+
+  const { data: lotRows } = await supabase
+    .from('item_stock_lots')
+    .select('quantity')
+    .eq('item_id', itemId)
+    .eq('user_id', user.id)
+
+  const lotSum = (lotRows ?? []).reduce((s, r) => s + (r.quantity ?? 0), 0)
+  const effectiveSum = lotRows && lotRows.length > 0 ? lotSum : meta.quantity ?? 0
+
   const { error } = await supabase
     .from('items')
     .update({
@@ -26,7 +46,6 @@ export async function updateItemAction(itemId: string, formData: FormData) {
       sh: null,
       barcode_code: barcode_code || generateBarcodeValue(),
       serial_number: null,
-      quantity,
       location: location || null,
       description: description || '',
       updated_at: new Date().toISOString(),
@@ -37,5 +56,23 @@ export async function updateItemAction(itemId: string, formData: FormData) {
   if (error) {
     redirect(`/items/${itemId}/edit?error=` + encodeURIComponent(error.message))
   }
+
+  if (quantity !== effectiveSum) {
+    await supabase.from('item_stock_lots').delete().eq('item_id', itemId).eq('user_id', user.id)
+
+    if (quantity > 0) {
+      const { error: lotErr } = await supabase.from('item_stock_lots').insert({
+        user_id: user.id,
+        item_id: itemId,
+        quantity,
+        note: '',
+        created_at: meta.created_at,
+      })
+      if (lotErr) {
+        redirect(`/items/${itemId}/edit?error=` + encodeURIComponent(lotErr.message))
+      }
+    }
+  }
+
   redirect(`/items/${itemId}`)
 }

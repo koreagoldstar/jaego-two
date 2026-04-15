@@ -45,3 +45,13 @@ export type ProjectUsagePlan = {
   created_at: string
   updated_at: string
 }
+
+/** 품목 내 입고 단위(날짜·수량별). 합계가 items.quantity와 일치 */
+export type ItemStockLot = {
+  id: string
+  user_id: string
+  item_id: string
+  quantity: number
+  note: string | null
+  created_at: string
+}
