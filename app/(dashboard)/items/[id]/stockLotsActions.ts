@@ -36,7 +36,7 @@ export async function addItemStockLotAction(itemId: string, formData: FormData) 
     return {
       ok: false as const,
       error:
-        '이 입고의 QR(스캔 코드)를 입력하세요. 라벨에 찍힌 값과 같게 넣어야 나중에 QR로 이 재고를 통째로 삭제할 수 있습니다.',
+        '이 입고의 QR(스캔 코드)를 입력하세요. 라벨에 찍힌 값과 같게 넣어 주세요.',
     }
   }
   const createdRaw = String(formData.get('created_at') ?? '').trim()
@@ -82,7 +82,7 @@ export async function updateItemStockLotAction(
   if (!lot_code) {
     return {
       ok: false as const,
-      error: 'QR(스캔 코드)를 비울 수 없습니다. 삭제만 하려면 상단「QR로 재고 삭제」를 쓰세요.',
+      error: 'QR(스캔 코드)를 비울 수 없습니다. 재고 1개만 줄이려면 아래「재고 수량 기준 라벨」에서 삭제하세요.',
     }
   }
   const createdRaw = String(formData.get('created_at') ?? '').trim()
@@ -119,7 +119,7 @@ export async function deleteItemStockLotAction(itemId: string, lotId: string) {
 
   const { data: row, error: selErr } = await supabase
     .from('item_stock_lots')
-    .select('id, lot_code')
+    .select('id')
     .eq('id', lotId)
     .eq('item_id', itemId)
     .eq('user_id', user.id)
@@ -132,12 +132,6 @@ export async function deleteItemStockLotAction(itemId: string, lotId: string) {
     return { ok: false as const, error: msg }
   }
   if (!row) return { ok: false as const, error: '입고를 찾을 수 없습니다' }
-  if ((row.lot_code ?? '').trim() !== '') {
-    return {
-      ok: false as const,
-      error: 'QR이 등록된 입고는「QR로 재고 삭제」에 코드를 입력해 삭제하세요.',
-    }
-  }
 
   const { error } = await supabase
     .from('item_stock_lots')
@@ -152,48 +146,6 @@ export async function deleteItemStockLotAction(itemId: string, lotId: string) {
       : error.message
     return { ok: false as const, error: msg }
   }
-  revalidatePath(`/items/${itemId}`)
-  revalidatePath('/items')
-  return { ok: true as const }
-}
-
-/** 입력한 QR과 일치하는 입고 한 줄 전체 삭제 */
-export async function deleteItemStockLotByQrAction(itemId: string, formData: FormData) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
-
-  const raw = String(formData.get('delete_qr') ?? '').trim()
-  if (!raw) return { ok: false as const, error: '삭제할 QR(스캔 코드)를 입력하세요' }
-
-  const needle = raw.toLowerCase()
-  const { data: rows, error: selErr } = await supabase
-    .from('item_stock_lots')
-    .select('id, lot_code')
-    .eq('item_id', itemId)
-    .eq('user_id', user.id)
-
-  if (selErr) {
-    const msg = isMissingItemStockLotsTable(selErr)
-      ? '입고 단위 테이블이 없습니다.'
-      : selErr.message
-    return { ok: false as const, error: msg }
-  }
-
-  const match = (rows ?? []).find(r => (r.lot_code ?? '').trim().toLowerCase() === needle)
-  if (!match) {
-    return { ok: false as const, error: '이 품목에 해당 QR로 등록된 입고가 없습니다.' }
-  }
-
-  const { error } = await supabase
-    .from('item_stock_lots')
-    .delete()
-    .eq('id', match.id)
-    .eq('user_id', user.id)
-
-  if (error) return { ok: false as const, error: error.message }
   revalidatePath(`/items/${itemId}`)
   revalidatePath('/items')
   return { ok: true as const }

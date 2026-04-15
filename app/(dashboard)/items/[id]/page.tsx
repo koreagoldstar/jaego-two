@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Item, ItemStockLot } from '@/lib/supabase/types'
 import { buildItemLabelVariants } from '@/lib/items/labelVariants'
+import { ItemLabelStockListClient } from '@/components/items/ItemLabelStockListClient'
 import { ItemStockLegacyClient } from '@/components/items/ItemStockLegacyClient'
 import { ItemStockLotsClient } from '@/components/items/ItemStockLotsClient'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
@@ -77,11 +78,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
           <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">{lotsLoadError}</p>
         )}
         {lotsTableMissing ? (
-          <ItemStockLegacyClient
-            itemId={item.id}
-            quantity={item.quantity}
-            itemBarcode={item.barcode_code ?? null}
-          />
+          <ItemStockLegacyClient itemId={item.id} quantity={item.quantity} />
         ) : (
           <ItemStockLotsClient itemId={item.id} lots={lots} />
         )}
@@ -95,15 +92,11 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
         {labelRows.length === 0 ? (
           <p className="text-sm text-slate-500">현재 재고가 0개라 라벨이 없습니다.</p>
         ) : (
-          <ul className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
-            {labelRows.map(row => (
-              <li key={`${item.id}-${row.index}`} className="px-3 py-2 text-xs text-slate-700 space-y-1">
-                <p className="font-medium text-slate-900">#{row.index}</p>
-                {row.barcode && <p>QR 코드값: {row.barcode}</p>}
-                {row.payload && <p className="text-slate-500 break-all">인쇄값: {row.payload}</p>}
-              </li>
-            ))}
-          </ul>
+          <ItemLabelStockListClient
+            itemId={item.id}
+            labelRows={labelRows}
+            legacyStockMode={lotsTableMissing}
+          />
         )}
       </div>
 
