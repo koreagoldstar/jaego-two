@@ -77,7 +77,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
           <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">{lotsLoadError}</p>
         )}
         {lotsTableMissing ? (
-          <StockLotsMigrationNotice />
+          <StockLotsMigrationNotice errorMessage={lotsErr?.message ?? null} />
         ) : (
           <>
             <p className="text-xs text-slate-500">

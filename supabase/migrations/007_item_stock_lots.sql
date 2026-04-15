@@ -172,3 +172,6 @@ $$;
 
 revoke all on function public.apply_stock_move from public;
 grant execute on function public.apply_stock_move to authenticated;
+
+-- PostgREST가 새 테이블을 바로 노출하도록 (선택, 일부 프로젝트에서만 필요)
+NOTIFY pgrst, 'reload schema';
