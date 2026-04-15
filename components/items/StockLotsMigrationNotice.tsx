@@ -1,3 +1,4 @@
+import { DiagnoseStockLotsButton } from '@/components/items/DiagnoseStockLotsButton'
 import { RefreshLotsButton } from '@/components/items/RefreshLotsButton'
 
 type Props = {
@@ -27,8 +28,8 @@ export function StockLotsMigrationNotice({ errorMessage }: Props) {
             NOTIFY pgrst, &apos;reload schema&apos;;
           </pre>
           <p className="text-amber-900/85">
-            그래도 같으면 Supabase <strong>Table Editor</strong>에서 <code className="px-1 rounded bg-amber-100">item_stock_lots</code> 테이블이 보이는지 확인하세요. Vercel/로컬의{' '}
-            <code className="px-1 rounded bg-amber-100">NEXT_PUBLIC_SUPABASE_URL</code>이 이 프로젝트와 같은지도 확인합니다.
+            그래도 같으면 Supabase <strong>Table Editor</strong>에서 <code className="px-1 rounded bg-amber-100">item_stock_lots</code> 테이블이 보이는지 확인하세요. 아래「DB 연결 진단」으로 앱이 붙는 Supabase 주소(
+            <code className="px-1 rounded bg-amber-100">xxx.supabase.co</code>)가 대시보드와 같은지 확인합니다.
           </p>
         </div>
       ) : (
@@ -46,9 +47,12 @@ export function StockLotsMigrationNotice({ errorMessage }: Props) {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        <RefreshLotsButton />
-        <span className="text-[11px] text-amber-800/80">브라우저 새로고침(F5)도 같은 효과입니다.</span>
+      <div className="flex flex-col gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshLotsButton />
+          <span className="text-[11px] text-amber-800/80">브라우저 새로고침(F5)도 같은 효과입니다.</span>
+        </div>
+        <DiagnoseStockLotsButton />
       </div>
 
       <p className="text-xs text-amber-900/80 border-t border-amber-200/60 pt-2">
