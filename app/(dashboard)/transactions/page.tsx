@@ -82,9 +82,21 @@ export default async function TransactionsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">입출고 이력</h1>
-        <p className="text-sm text-slate-500">최근 200건 · 카드에서 수정 가능 (입출고 금액/구분은 기록 참고용)</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">입출고 이력</h1>
+          <p className="text-sm text-slate-500">최근 200건 · 카드에서 수정 가능 (입출고 금액/구분은 기록 참고용)</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 flex flex-wrap items-center gap-2 shrink-0">
+          <span className="text-sm font-medium text-slate-800">엑셀</span>
+          <a
+            href="/api/transactions/export"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            입출고 이력 다운로드
+          </a>
+          <span className="text-xs text-slate-500">화면은 200건, 엑셀은 유형별 최대 5,000건까지.</span>
+        </div>
       </div>
 
       {historyRows.length === 0 ? (

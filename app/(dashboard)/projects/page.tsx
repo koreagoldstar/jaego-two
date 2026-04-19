@@ -135,13 +135,13 @@ export default async function ProjectsPage() {
           href="/api/projects/export?type=plans"
           className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
         >
-          사용예정 재고 (CSV)
+          사용예정 재고
         </a>
         <a
           href="/api/projects/export?type=history"
           className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
         >
-          프로젝트 출고 이력 (CSV)
+          프로젝트 출고 이력
         </a>
       </div>
 

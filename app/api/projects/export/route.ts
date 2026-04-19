@@ -1,17 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import * as XLSX from 'xlsx'
 
-function csvEscape(value: unknown) {
-  const s = String(value ?? '')
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
-  return s
-}
-
-function toCsv(headers: string[], rows: Array<Array<unknown>>) {
-  const lines = [headers.map(csvEscape).join(',')]
-  for (const row of rows) lines.push(row.map(csvEscape).join(','))
-  return `\uFEFF${lines.join('\n')}`
-}
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   const type = request.nextUrl.searchParams.get('type') ?? 'plans'
@@ -20,6 +11,8 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return new NextResponse('Unauthorized', { status: 401 })
+
+  const wb = XLSX.utils.book_new()
 
   if (type === 'history') {
     const [{ data: txRows }, { data: itemRows }, { data: planRows }] = await Promise.all([
@@ -43,20 +36,24 @@ export async function GET(request: NextRequest) {
       if (project && date && !installByProject.has(project)) installByProject.set(project, date)
     }
 
-    const csv = toCsv(
-      ['출고일시', '설치일자', '프로젝트', '품목', '수량'],
-      (txRows ?? []).map(r => [
+    const headers = ['출고일시', '설치일자', '프로젝트', '품목', '수량']
+    const aoa = [
+      headers,
+      ...(txRows ?? []).map(r => [
         new Date(r.created_at).toLocaleString('ko-KR'),
         installByProject.get((r.project ?? '').trim()) ?? '',
         r.project ?? '',
         itemById.get(r.item_id) ?? '품목',
         r.amount ?? 0,
-      ])
-    )
-    return new NextResponse(csv, {
+      ]),
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(aoa)
+    XLSX.utils.book_append_sheet(wb, ws, '프로젝트출고이력')
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+    return new NextResponse(buf, {
       headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="project-out-history.csv"`,
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': 'attachment; filename="jaego-project-out-history.xlsx"',
       },
     })
   }
@@ -71,9 +68,10 @@ export async function GET(request: NextRequest) {
   ])
   const itemById = new Map((itemRows ?? []).map(r => [r.id, r] as const))
 
-  const csv = toCsv(
-    ['프로젝트', '설치일자', '품목', '현재재고', '사용예정'],
-    (planRows ?? []).map(r => {
+  const headers = ['프로젝트', '설치일자', '품목', '현재재고', '사용예정']
+  const aoa = [
+    headers,
+    ...(planRows ?? []).map(r => {
       const item = itemById.get(r.item_id)
       return [
         r.project_name ?? '',
@@ -82,12 +80,16 @@ export async function GET(request: NextRequest) {
         item?.quantity ?? 0,
         r.planned_qty ?? 0,
       ]
-    })
-  )
-  return new NextResponse(csv, {
+    }),
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  XLSX.utils.book_append_sheet(wb, ws, '사용예정재고')
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+
+  return new NextResponse(buf, {
     headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="project-plans.csv"`,
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="jaego-project-plans.xlsx"',
     },
   })
 }
