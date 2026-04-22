@@ -33,13 +33,18 @@ const LABEL_PRESETS: LabelPreset[] = [
   { key: '100x50', label: '100 × 50mm', widthMm: 100, heightMm: 50 },
 ]
 
-/** 본문(캡션·메타)에 쓸 여백을 최소화해 바코드 영역을 최대화 */
-function labelBarcodeMaxHeightMm(heightMm: number, textMode: 'normal' | 'compact' = 'normal'): number {
+/** 본문(캡션·메타) 공간을 조절해 바코드 영역을 최대화 */
+function labelBarcodeMaxHeightMm(
+  heightMm: number,
+  textMode: 'normal' | 'compact' | 'compact-with-text' = 'normal'
+): number {
   const pad = 1.2
   const textReserve =
     textMode === 'compact'
       ? Math.min(1.2, heightMm * 0.06)
-      : Math.min(10, heightMm * 0.26)
+      : textMode === 'compact-with-text'
+        ? Math.min(4.2, Math.max(2.8, heightMm * 0.18))
+        : Math.min(8, heightMm * 0.22)
   return Math.max(5, heightMm - textReserve - pad * 2)
 }
 
@@ -79,7 +84,12 @@ function scaleCanvasToMax(
 }
 
 /** 숨김 iframe 인쇄 전용 — 본 페이지 @page 와 충돌하지 않음 */
-function buildPrintIframeStyles(widthMm: number, heightMm: number, barcodeMaxMm: number): string {
+function buildPrintIframeStyles(
+  widthMm: number,
+  heightMm: number,
+  barcodeMaxMm: number,
+  compact: boolean
+): string {
   const pad = 1.2
   return `
       @page {
@@ -131,18 +141,24 @@ function buildPrintIframeStyles(widthMm: number, heightMm: number, barcodeMaxMm:
       }
       .caption {
         margin: 0;
-        font-size: 6pt;
+        font-size: ${compact ? '4.8pt' : '5.6pt'};
         line-height: 1.05;
         text-align: center;
         flex-shrink: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .meta {
         margin: 0;
-        font-size: 5.5pt;
+        font-size: ${compact ? '4.4pt' : '5pt'};
         line-height: 1.05;
         text-align: center;
         word-break: break-all;
         flex-shrink: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .barcode-wrap {
         flex: 1 1 auto;
@@ -490,7 +506,7 @@ export function BarcodePanel() {
       payload: string,
       labelWidthMm: number,
       labelHeightMm: number,
-      textMode: 'normal' | 'compact' = 'normal'
+      textMode: 'normal' | 'compact' | 'compact-with-text' = 'normal'
     ): Promise<string | null> => {
       const clean = normalizeBarcodePayload(payload)
       if (!clean) return null
@@ -612,7 +628,7 @@ export function BarcodePanel() {
   const wMm = paperPreset.widthMm
   const hMm = paperPreset.heightMm
   const printBarcodeMaxHeightMm = useMemo(
-    () => labelBarcodeMaxHeightMm(hMm, hMm <= 24 ? 'compact' : 'normal'),
+    () => labelBarcodeMaxHeightMm(hMm, hMm <= 24 ? 'compact-with-text' : 'normal'),
     [hMm]
   )
 
@@ -631,18 +647,19 @@ export function BarcodePanel() {
             },
           ]
         : validItemRows.map(({ item, payload, unitIndex }) => ({
-            caption: compactPrint ? '' : `${item.name} #${unitIndex}`,
-            metaLines: compactPrint
-              ? []
-              : [
-                  item.barcode_code ? `코드: ${item.barcode_code}` : '',
-                ].filter(Boolean),
+            caption: `${item.name} #${unitIndex}`,
+            metaLines: [item.barcode_code ? `코드: ${item.barcode_code}` : ''].filter(Boolean),
             payload,
           }))
 
     const parts: string[] = []
     for (const label of labels) {
-      const dataUrl = await drawToDataUrlForPrint(label.payload, wMm, hMm, compactPrint ? 'compact' : 'normal')
+      const dataUrl = await drawToDataUrlForPrint(
+        label.payload,
+        wMm,
+        hMm,
+        compactPrint ? 'compact-with-text' : 'normal'
+      )
       if (!dataUrl) continue
       const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
       const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
@@ -688,7 +705,7 @@ export function BarcodePanel() {
   <head>
     <meta charset="utf-8" />
     <title>Barcode</title>
-    <style>${buildPrintIframeStyles(wMm, hMm, printBarcodeMaxHeightMm)}</style>
+    <style>${buildPrintIframeStyles(wMm, hMm, printBarcodeMaxHeightMm, compactPrint)}</style>
   </head>
   <body>${htmlLabels}</body>
 </html>`)
