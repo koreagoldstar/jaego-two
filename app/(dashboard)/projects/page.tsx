@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { deleteProjectPlanAction, saveProjectPlanAction } from '@/app/(dashboard)/projects/actions'
+import { deleteProjectPlanAction, updateProjectPlanEntryAction } from '@/app/(dashboard)/projects/actions'
 import type { Item } from '@/lib/supabase/types'
 import { ProjectPlanMultiForm } from '@/components/projects/ProjectPlanMultiForm'
 
@@ -185,10 +185,22 @@ export default async function ProjectsPage() {
                           </td>
                           <td className="py-2 pl-3">
                             <div className="flex justify-end gap-2">
-                              <form action={saveProjectPlanAction} className="flex items-center gap-1.5">
+                              <form action={updateProjectPlanEntryAction} className="flex items-center gap-1.5">
                                 <input type="hidden" name="project_name" value={row.project_name} />
                                 <input type="hidden" name="install_date" value={row.install_date ?? ''} />
-                                <input type="hidden" name="item_id" value={row.item_id} />
+                                <input type="hidden" name="original_item_id" value={row.item_id} />
+                                <select
+                                  name="item_id"
+                                  defaultValue={row.item_id}
+                                  className="max-w-[11rem] rounded-md border border-slate-200 px-2 py-1 text-xs"
+                                  aria-label="품목 선택"
+                                >
+                                  {items.map(item => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.name}
+                                    </option>
+                                  ))}
+                                </select>
                                 <input
                                   name="planned_qty"
                                   type="number"
