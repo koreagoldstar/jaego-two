@@ -14,6 +14,8 @@ type Props = {
 export function ItemStockReconcileClient({ itemId, currentCodes }: Props) {
   const router = useRouter()
   const [scanned, setScanned] = useState<string[]>([])
+  const [lastScanned, setLastScanned] = useState<string | null>(null)
+  const [lastScanAt, setLastScanAt] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const currentSet = useMemo(() => new Set(currentCodes.map(v => v.trim()).filter(Boolean)), [currentCodes])
@@ -25,6 +27,8 @@ export function ItemStockReconcileClient({ itemId, currentCodes }: Props) {
   function onDecode(code: string) {
     const trimmed = code.trim()
     if (!trimmed) return
+    setLastScanned(trimmed)
+    setLastScanAt(new Date().toISOString())
     setScanned(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed]))
   }
 
@@ -62,6 +66,11 @@ export function ItemStockReconcileClient({ itemId, currentCodes }: Props) {
           불일치: {missingInDb.length + extraInDb.length}개
         </div>
       </div>
+      {lastScanned && (
+        <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1.5">
+          스캔 확인 · {lastScanned} · {lastScanAt ? new Date(lastScanAt).toLocaleTimeString('ko-KR') : ''}
+        </p>
+      )}
 
       {(missingInDb.length > 0 || extraInDb.length > 0) && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 space-y-1 text-xs">

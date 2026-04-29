@@ -24,6 +24,8 @@ export function MoveStockClient() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [scanLine, setScanLine] = useState<string | null>(null)
+  const [lastScanAt, setLastScanAt] = useState<string | null>(null)
+  const [scanCount, setScanCount] = useState(0)
   const [showPicker, setShowPicker] = useState(false)
 
   const resolveRef = useRef<(code: string) => Promise<void>>(async () => {})
@@ -130,6 +132,8 @@ export function MoveStockClient() {
       }
       setSelectedId(id)
       setScanLine(`스캔: ${trimmed}`)
+      setLastScanAt(new Date().toISOString())
+      setScanCount(prev => prev + 1)
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
         navigator.vibrate(35)
       }
@@ -238,6 +242,11 @@ export function MoveStockClient() {
       {scanLine && (
         <p className="text-center text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-100 rounded-xl py-2 px-3">
           {scanLine}
+        </p>
+      )}
+      {lastScanAt && (
+        <p className="text-center text-[11px] text-emerald-700 bg-emerald-50/70 border border-emerald-100 rounded-xl py-1.5 px-3">
+          스캔 확인 · 총 {scanCount}건 · {new Date(lastScanAt).toLocaleTimeString('ko-KR')}
         </p>
       )}
 

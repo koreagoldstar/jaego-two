@@ -21,6 +21,8 @@ export function BulkOutClient() {
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [scanLine, setScanLine] = useState<string | null>(null)
+  const [lastScanAt, setLastScanAt] = useState<string | null>(null)
+  const [scanCount, setScanCount] = useState(0)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [bucket, setBucket] = useState<Record<string, ScanBucket>>({})
   const resolveRef = useRef<(code: string) => Promise<void>>(async () => {})
@@ -101,6 +103,8 @@ export function BulkOutClient() {
         }
       })
       setScanLine(`${item.name} 스캔 +1`)
+      setLastScanAt(new Date().toISOString())
+      setScanCount(prev => prev + 1)
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(35)
     },
     [items, project, projectItemMap]
@@ -220,6 +224,11 @@ export function BulkOutClient() {
       {scanLine && (
         <p className="text-center text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-100 rounded-xl py-2 px-3">
           {scanLine}
+        </p>
+      )}
+      {lastScanAt && (
+        <p className="text-center text-[11px] text-emerald-700 bg-emerald-50/70 border border-emerald-100 rounded-xl py-1.5 px-3">
+          스캔 확인 · 총 {scanCount}건 · {new Date(lastScanAt).toLocaleTimeString('ko-KR')}
         </p>
       )}
 
