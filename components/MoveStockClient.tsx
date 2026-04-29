@@ -18,6 +18,7 @@ export function MoveStockClient() {
   const [amount, setAmount] = useState(1)
   const [project, setProject] = useState('')
   const [projectOptions, setProjectOptions] = useState<string[]>([])
+  const [projectItemMap, setProjectItemMap] = useState<Record<string, string[]>>({})
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -36,12 +37,24 @@ export function MoveStockClient() {
     setItems((data ?? []) as Item[])
     const { data: projectRows } = await supabase
       .from('project_usage_plans')
-      .select('project_name')
+      .select('project_name, item_id')
       .eq('user_id', user.id)
-    const names = Array.from(
-      new Set((projectRows ?? []).map(r => (r as { project_name?: string }).project_name?.trim() ?? '').filter(Boolean))
-    ).sort((a, b) => a.localeCompare(b))
+    const rows = (projectRows ?? []) as Array<{ project_name?: string; item_id?: string }>
+    const names = Array.from(new Set(rows.map(r => (r.project_name ?? '').trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    )
+    const byProject: Record<string, string[]> = {}
+    for (const row of rows) {
+      const name = (row.project_name ?? '').trim()
+      const itemId = (row.item_id ?? '').trim()
+      if (!name || !itemId) continue
+      byProject[name] = byProject[name] ? [...byProject[name], itemId] : [itemId]
+    }
+    for (const key of Object.keys(byProject)) {
+      byProject[key] = Array.from(new Set(byProject[key]))
+    }
     setProjectOptions(names)
+    setProjectItemMap(byProject)
     setLoading(false)
   }, [])
 
@@ -69,6 +82,14 @@ export function MoveStockClient() {
 
     const id = await findItemIdByBarcode(supabase, user.id, trimmed)
     if (id) {
+      const selectedProject = project.trim()
+      if (selectedProject) {
+        const allowed = projectItemMap[selectedProject] ?? []
+        if (allowed.length > 0 && !allowed.includes(id)) {
+          setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 예정 품목이 아닙니다.` })
+          return
+        }
+      }
       setSelectedId(id)
       setScanLine(`스캔: ${trimmed}`)
       if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -77,7 +98,7 @@ export function MoveStockClient() {
       return
     }
     setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
-  }, [])
+  }, [project, projectItemMap])
 
   resolveRef.current = resolveBarcode
 
@@ -107,6 +128,13 @@ export function MoveStockClient() {
   }, [])
 
   const selected = useMemo(() => items.find(i => i.id === selectedId), [items, selectedId])
+  const projectItems = useMemo(() => {
+    const name = project.trim()
+    if (!name) return []
+    const ids = new Set(projectItemMap[name] ?? [])
+    return items.filter(i => ids.has(i.id))
+  }, [project, projectItemMap, items])
+  const pickerItems = project.trim() ? projectItems : items
 
   async function run(direction: 'in' | 'out') {
     setMsg(null)
@@ -189,9 +217,11 @@ export function MoveStockClient() {
             </button>
           </div>
         </div>
-      ) : items.length === 0 ? (
+      ) : pickerItems.length === 0 ? (
         <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/80 p-6 text-center text-sm text-slate-600">
-          등록된 품목이 없습니다. 재고 메뉴에서 품목을 먼저 등록한 뒤 다시 오세요.
+          {project.trim()
+            ? '선택한 프로젝트에 연결된 품목이 없습니다. 프로젝트 예정 품목을 먼저 등록하세요.'
+            : '등록된 품목이 없습니다. 재고 메뉴에서 품목을 먼저 등록한 뒤 다시 오세요.'}
         </div>
       ) : (
         <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/80 p-6 text-center text-sm text-slate-600">
@@ -220,7 +250,7 @@ export function MoveStockClient() {
             className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base"
           >
             <option value="">선택…</option>
-            {items.map(i => (
+            {pickerItems.map(i => (
               <option key={i.id} value={i.id}>
                 {i.name} (재고 {i.quantity})
               </option>
@@ -238,11 +268,31 @@ export function MoveStockClient() {
           placeholder="예: OO방송, A행사"
           className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
         />
+        <label className="block text-xs text-slate-500">
+          프로젝트 불러오기
+          <select
+            value={project}
+            onChange={e => setProject(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+          >
+            <option value="">선택…</option>
+            {projectOptions.map(name => (
+              <option key={`pick-${name}`} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
         <datalist id="project-options">
           {projectOptions.map(name => (
             <option key={name} value={name} />
           ))}
         </datalist>
+        {project.trim() && (
+          <p className="text-xs text-slate-500">
+            프로젝트 품목 {projectItems.length}개가 연동됩니다. 스캔 시 해당 품목만 출고 선택됩니다.
+          </p>
+        )}
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">

@@ -17,6 +17,7 @@ export function BulkOutClient() {
   const [loading, setLoading] = useState(true)
   const [project, setProject] = useState('')
   const [projectOptions, setProjectOptions] = useState<string[]>([])
+  const [projectItemMap, setProjectItemMap] = useState<Record<string, string[]>>({})
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [scanLine, setScanLine] = useState<string | null>(null)
@@ -34,12 +35,24 @@ export function BulkOutClient() {
     setItems((data ?? []) as Item[])
     const { data: projectRows } = await supabase
       .from('project_usage_plans')
-      .select('project_name')
+      .select('project_name, item_id')
       .eq('user_id', user.id)
-    const names = Array.from(
-      new Set((projectRows ?? []).map(r => (r as { project_name?: string }).project_name?.trim() ?? '').filter(Boolean))
-    ).sort((a, b) => a.localeCompare(b))
+    const rows = (projectRows ?? []) as Array<{ project_name?: string; item_id?: string }>
+    const names = Array.from(new Set(rows.map(r => (r.project_name ?? '').trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b)
+    )
+    const byProject: Record<string, string[]> = {}
+    for (const row of rows) {
+      const name = (row.project_name ?? '').trim()
+      const itemId = (row.item_id ?? '').trim()
+      if (!name || !itemId) continue
+      byProject[name] = byProject[name] ? [...byProject[name], itemId] : [itemId]
+    }
+    for (const key of Object.keys(byProject)) {
+      byProject[key] = Array.from(new Set(byProject[key]))
+    }
     setProjectOptions(names)
+    setProjectItemMap(byProject)
     setLoading(false)
   }, [])
 
@@ -64,6 +77,14 @@ export function BulkOutClient() {
         setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
         return
       }
+      const selectedProject = project.trim()
+      if (selectedProject) {
+        const allowed = projectItemMap[selectedProject] ?? []
+        if (allowed.length > 0 && !allowed.includes(id)) {
+          setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 예정 품목이 아닙니다.` })
+          return
+        }
+      }
 
       const item = items.find(i => i.id === id)
       if (!item) {
@@ -82,7 +103,7 @@ export function BulkOutClient() {
       setScanLine(`${item.name} 스캔 +1`)
       if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(35)
     },
-    [items]
+    [items, project, projectItemMap]
   )
 
   resolveRef.current = resolveBarcode
@@ -211,11 +232,31 @@ export function BulkOutClient() {
           placeholder="예: OO방송, A행사"
           className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
         />
+        <label className="block text-xs text-slate-500">
+          프로젝트 불러오기
+          <select
+            value={project}
+            onChange={e => setProject(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white"
+          >
+            <option value="">선택…</option>
+            {projectOptions.map(name => (
+              <option key={`pick-${name}`} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
         <datalist id="bulk-project-options">
           {projectOptions.map(name => (
             <option key={name} value={name} />
           ))}
         </datalist>
+        {project.trim() && (
+          <p className="text-xs text-slate-500">
+            프로젝트 품목만 스캔 등록됩니다. 다른 품목 QR은 자동 차단됩니다.
+          </p>
+        )}
         <label className="block text-sm font-medium text-slate-700">메모 (선택)</label>
         <input
           value={note}
