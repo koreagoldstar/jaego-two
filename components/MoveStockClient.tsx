@@ -19,6 +19,7 @@ export function MoveStockClient() {
   const [project, setProject] = useState('')
   const [projectOptions, setProjectOptions] = useState<string[]>([])
   const [projectItemMap, setProjectItemMap] = useState<Record<string, string[]>>({})
+  const [projectRemainingMap, setProjectRemainingMap] = useState<Record<string, number>>({})
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -35,26 +36,58 @@ export function MoveStockClient() {
     if (!user) return
     const { data } = await supabase.from('items').select('*').eq('user_id', user.id).order('name')
     setItems((data ?? []) as Item[])
-    const { data: projectRows } = await supabase
-      .from('project_usage_plans')
-      .select('project_name, item_id')
-      .eq('user_id', user.id)
-    const rows = (projectRows ?? []) as Array<{ project_name?: string; item_id?: string }>
+    const [projectRes, txRes] = await Promise.all([
+      supabase.from('project_usage_plans').select('project_name, item_id, planned_qty').eq('user_id', user.id),
+      supabase
+        .from('stock_transactions')
+        .select('project, item_id, direction, amount')
+        .eq('user_id', user.id)
+        .not('project', 'is', null)
+        .neq('project', ''),
+    ])
+    const rows = (projectRes.data ?? []) as Array<{ project_name?: string; item_id?: string; planned_qty?: number }>
+    const txRows = (txRes.data ?? []) as Array<{
+      project?: string | null
+      item_id?: string
+      direction?: 'in' | 'out'
+      amount?: number
+    }>
     const names = Array.from(new Set(rows.map(r => (r.project_name ?? '').trim()).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     )
     const byProject: Record<string, string[]> = {}
+    const plannedMap = new Map<string, number>()
     for (const row of rows) {
       const name = (row.project_name ?? '').trim()
       const itemId = (row.item_id ?? '').trim()
       if (!name || !itemId) continue
+      const planned = Math.max(0, Number(row.planned_qty) || 0)
+      if (planned <= 0) continue
       byProject[name] = byProject[name] ? [...byProject[name], itemId] : [itemId]
+      const key = `${name}::${itemId}`
+      plannedMap.set(key, (plannedMap.get(key) ?? 0) + planned)
     }
+    const shippedMap = new Map<string, number>()
+    for (const tx of txRows) {
+      const projectName = (tx.project ?? '').trim()
+      const itemId = (tx.item_id ?? '').trim()
+      if (!projectName || !itemId) continue
+      const amount = Math.max(0, Number(tx.amount) || 0)
+      const delta = tx.direction === 'out' ? amount : -amount
+      const key = `${projectName}::${itemId}`
+      shippedMap.set(key, (shippedMap.get(key) ?? 0) + delta)
+    }
+    const remainingEntries: Array<[string, number]> = []
+    plannedMap.forEach((planned, key) => {
+      const shipped = Math.max(0, shippedMap.get(key) ?? 0)
+      remainingEntries.push([key, planned - shipped])
+    })
     for (const key of Object.keys(byProject)) {
       byProject[key] = Array.from(new Set(byProject[key]))
     }
     setProjectOptions(names)
     setProjectItemMap(byProject)
+    setProjectRemainingMap(Object.fromEntries(remainingEntries))
     setLoading(false)
   }, [])
 
@@ -128,13 +161,17 @@ export function MoveStockClient() {
   }, [])
 
   const selected = useMemo(() => items.find(i => i.id === selectedId), [items, selectedId])
+  const selectedProject = project.trim()
+  const selectedRemaining = useMemo(() => {
+    if (!selectedProject || !selectedId) return null
+    return projectRemainingMap[`${selectedProject}::${selectedId}`] ?? null
+  }, [selectedProject, selectedId, projectRemainingMap])
   const projectItems = useMemo(() => {
-    const name = project.trim()
-    if (!name) return []
-    const ids = new Set(projectItemMap[name] ?? [])
+    if (!selectedProject) return []
+    const ids = new Set(projectItemMap[selectedProject] ?? [])
     return items.filter(i => ids.has(i.id))
-  }, [project, projectItemMap, items])
-  const pickerItems = project.trim() ? projectItems : items
+  }, [selectedProject, projectItemMap, items])
+  const pickerItems = selectedProject ? projectItems : items
 
   async function run(direction: 'in' | 'out') {
     setMsg(null)
@@ -197,6 +234,9 @@ export function MoveStockClient() {
               <p className="text-[11px] text-slate-400 uppercase tracking-wide">선택된 품목</p>
               <p className="text-lg font-bold leading-snug truncate">{selected.name}</p>
               <p className="text-sm text-slate-300 tabular-nums mt-1">현재 재고 {selected.quantity}</p>
+              {selectedRemaining !== null && (
+                <p className="text-xs text-amber-300 mt-1">프로젝트 예정 잔여 {selectedRemaining}</p>
+              )}
               {selected.barcode_code && (
                 <p className="text-xs text-slate-500 mt-1 truncate">
                   <span>QR 코드 {selected.barcode_code}</span>
@@ -219,7 +259,7 @@ export function MoveStockClient() {
         </div>
       ) : pickerItems.length === 0 ? (
         <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/80 p-6 text-center text-sm text-slate-600">
-          {project.trim()
+          {selectedProject
             ? '선택한 프로젝트에 연결된 품목이 없습니다. 프로젝트 예정 품목을 먼저 등록하세요.'
             : '등록된 품목이 없습니다. 재고 메뉴에서 품목을 먼저 등록한 뒤 다시 오세요.'}
         </div>
@@ -250,11 +290,15 @@ export function MoveStockClient() {
             className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base"
           >
             <option value="">선택…</option>
-            {pickerItems.map(i => (
-              <option key={i.id} value={i.id}>
-                {i.name} (재고 {i.quantity})
-              </option>
-            ))}
+            {pickerItems.map(i => {
+              const remaining = selectedProject ? projectRemainingMap[`${selectedProject}::${i.id}`] : undefined
+              return (
+                <option key={i.id} value={i.id}>
+                  {i.name} (재고 {i.quantity}
+                  {typeof remaining === 'number' ? ` / 잔여 ${remaining}` : ''})
+                </option>
+              )
+            })}
           </select>
         </div>
       )}
@@ -288,7 +332,7 @@ export function MoveStockClient() {
             <option key={name} value={name} />
           ))}
         </datalist>
-        {project.trim() && (
+        {selectedProject && (
           <p className="text-xs text-slate-500">
             프로젝트 품목 {projectItems.length}개가 연동됩니다. 스캔 시 해당 품목만 출고 선택됩니다.
           </p>
