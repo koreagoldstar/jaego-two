@@ -122,6 +122,11 @@ export function MoveStockClient() {
           setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 예정 품목이 아닙니다.` })
           return
         }
+        const remaining = projectRemainingMap[`${selectedProject}::${id}`]
+        if (typeof remaining === 'number' && remaining <= 0) {
+          setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 잔여가 없어 출고할 수 없습니다.` })
+          return
+        }
       }
       setSelectedId(id)
       setScanLine(`스캔: ${trimmed}`)
@@ -131,7 +136,7 @@ export function MoveStockClient() {
       return
     }
     setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
-  }, [project, projectItemMap])
+  }, [project, projectItemMap, projectRemainingMap])
 
   resolveRef.current = resolveBarcode
 
@@ -170,8 +175,12 @@ export function MoveStockClient() {
   const projectItems = useMemo(() => {
     if (!selectedProject) return []
     const ids = new Set(projectItemMap[selectedProject] ?? [])
-    return items.filter(i => ids.has(i.id))
-  }, [selectedProject, projectItemMap, items])
+    return items.filter(i => {
+      if (!ids.has(i.id)) return false
+      const remaining = projectRemainingMap[`${selectedProject}::${i.id}`]
+      return typeof remaining !== 'number' || remaining > 0
+    })
+  }, [selectedProject, projectItemMap, projectRemainingMap, items])
   const pickerItems = selectedProject ? projectItems : items
 
   async function run(direction: 'in' | 'out') {
