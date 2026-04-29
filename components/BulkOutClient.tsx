@@ -23,6 +23,7 @@ export function BulkOutClient() {
   const [scanLine, setScanLine] = useState<string | null>(null)
   const [lastScanAt, setLastScanAt] = useState<string | null>(null)
   const [scanCount, setScanCount] = useState(0)
+  const [pendingScan, setPendingScan] = useState<{ code: string; itemId: string; itemName: string } | null>(null)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [bucket, setBucket] = useState<Record<string, ScanBucket>>({})
   const resolveRef = useRef<(code: string) => Promise<void>>(async () => {})
@@ -65,6 +66,10 @@ export function BulkOutClient() {
   const resolveBarcode = useCallback(
     async (code: string) => {
       setMsg(null)
+      if (pendingScan) {
+        setMsg({ type: 'err', text: '이전 스캔을 먼저 확인/취소하세요.' })
+        return
+      }
       const trimmed = code.trim()
       if (!trimmed) return
 
@@ -94,20 +99,9 @@ export function BulkOutClient() {
         return
       }
 
-      setBucket(prev => {
-        const current = prev[id]
-        const nextCount = (current?.count ?? 0) + 1
-        return {
-          ...prev,
-          [id]: { item, count: nextCount },
-        }
-      })
-      setScanLine(`${item.name} 스캔 +1`)
-      setLastScanAt(new Date().toISOString())
-      setScanCount(prev => prev + 1)
-      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(35)
+      setPendingScan({ code: trimmed, itemId: id, itemName: item.name })
     },
-    [items, project, projectItemMap]
+    [items, pendingScan, project, projectItemMap]
   )
 
   resolveRef.current = resolveBarcode
@@ -137,6 +131,22 @@ export function BulkOutClient() {
 
   const rows = useMemo(() => Object.values(bucket), [bucket])
   const totalScans = useMemo(() => rows.reduce((s, r) => s + r.count, 0), [rows])
+
+  function confirmPendingScan() {
+    if (!pendingScan) return
+    setBucket(prev => {
+      const current = prev[pendingScan.itemId]
+      const item = current?.item ?? items.find(i => i.id === pendingScan.itemId)
+      if (!item) return prev
+      const nextCount = (current?.count ?? 0) + 1
+      return { ...prev, [pendingScan.itemId]: { item, count: nextCount } }
+    })
+    setScanLine(`${pendingScan.itemName} 스캔 +1`)
+    setLastScanAt(new Date().toISOString())
+    setScanCount(prev => prev + 1)
+    setPendingScan(null)
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(35)
+  }
 
   const updateCount = useCallback((itemId: string, count: number) => {
     setBucket(prev => {
@@ -225,6 +235,29 @@ export function BulkOutClient() {
         <p className="text-center text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-100 rounded-xl py-2 px-3">
           {scanLine}
         </p>
+      )}
+      {pendingScan && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 space-y-2">
+          <p className="text-xs text-blue-800">
+            스캔 확인 대기: <span className="font-semibold">{pendingScan.itemName}</span> · {pendingScan.code}
+          </p>
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setPendingScan(null)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={confirmPendingScan}
+              className="rounded-lg bg-blue-600 text-white px-2.5 py-1 text-xs font-medium"
+            >
+              확인
+            </button>
+          </div>
+        </div>
       )}
       {lastScanAt && (
         <p className="text-center text-[11px] text-emerald-700 bg-emerald-50/70 border border-emerald-100 rounded-xl py-1.5 px-3">

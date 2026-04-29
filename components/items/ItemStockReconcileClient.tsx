@@ -16,6 +16,7 @@ export function ItemStockReconcileClient({ itemId, currentCodes }: Props) {
   const [scanned, setScanned] = useState<string[]>([])
   const [lastScanned, setLastScanned] = useState<string | null>(null)
   const [lastScanAt, setLastScanAt] = useState<string | null>(null)
+  const [pendingScan, setPendingScan] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const currentSet = useMemo(() => new Set(currentCodes.map(v => v.trim()).filter(Boolean)), [currentCodes])
@@ -27,9 +28,16 @@ export function ItemStockReconcileClient({ itemId, currentCodes }: Props) {
   function onDecode(code: string) {
     const trimmed = code.trim()
     if (!trimmed) return
-    setLastScanned(trimmed)
+    if (pendingScan) return
+    setPendingScan(trimmed)
+  }
+
+  function confirmPendingScan() {
+    if (!pendingScan) return
+    setLastScanned(pendingScan)
     setLastScanAt(new Date().toISOString())
-    setScanned(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed]))
+    setScanned(prev => (prev.includes(pendingScan) ? prev : [...prev, pendingScan]))
+    setPendingScan(null)
   }
 
   async function applyFix() {
@@ -70,6 +78,27 @@ export function ItemStockReconcileClient({ itemId, currentCodes }: Props) {
         <p className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1.5">
           스캔 확인 · {lastScanned} · {lastScanAt ? new Date(lastScanAt).toLocaleTimeString('ko-KR') : ''}
         </p>
+      )}
+      {pendingScan && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1.5 space-y-1">
+          <p className="text-[11px] text-blue-800">스캔 확인 대기: {pendingScan}</p>
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setPendingScan(null)}
+              className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[11px]"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={confirmPendingScan}
+              className="rounded bg-blue-600 text-white px-2 py-0.5 text-[11px] font-medium"
+            >
+              확인
+            </button>
+          </div>
+        </div>
       )}
 
       {(missingInDb.length > 0 || extraInDb.length > 0) && (

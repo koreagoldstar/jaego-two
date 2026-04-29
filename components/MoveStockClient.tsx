@@ -26,6 +26,7 @@ export function MoveStockClient() {
   const [scanLine, setScanLine] = useState<string | null>(null)
   const [lastScanAt, setLastScanAt] = useState<string | null>(null)
   const [scanCount, setScanCount] = useState(0)
+  const [pendingScan, setPendingScan] = useState<{ code: string; itemId: string; itemName: string } | null>(null)
   const [showPicker, setShowPicker] = useState(false)
 
   const resolveRef = useRef<(code: string) => Promise<void>>(async () => {})
@@ -106,6 +107,10 @@ export function MoveStockClient() {
 
   const resolveBarcode = useCallback(async (code: string) => {
     setMsg(null)
+    if (pendingScan) {
+      setMsg({ type: 'err', text: '이전 스캔을 먼저 확인/취소하세요.' })
+      return
+    }
     const trimmed = code.trim()
     if (!trimmed) return
 
@@ -130,17 +135,12 @@ export function MoveStockClient() {
           return
         }
       }
-      setSelectedId(id)
-      setScanLine(`스캔: ${trimmed}`)
-      setLastScanAt(new Date().toISOString())
-      setScanCount(prev => prev + 1)
-      if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate(35)
-      }
+      const item = items.find(i => i.id === id)
+      setPendingScan({ code: trimmed, itemId: id, itemName: item?.name ?? '품목' })
       return
     }
     setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
-  }, [project, projectItemMap, projectRemainingMap])
+  }, [items, pendingScan, project, projectItemMap, projectRemainingMap])
 
   resolveRef.current = resolveBarcode
 
@@ -186,6 +186,18 @@ export function MoveStockClient() {
     })
   }, [selectedProject, projectItemMap, projectRemainingMap, items])
   const pickerItems = selectedProject ? projectItems : items
+
+  function confirmPendingScan() {
+    if (!pendingScan) return
+    setSelectedId(pendingScan.itemId)
+    setScanLine(`스캔 확인: ${pendingScan.code}`)
+    setLastScanAt(new Date().toISOString())
+    setScanCount(prev => prev + 1)
+    setPendingScan(null)
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(35)
+    }
+  }
 
   async function run(direction: 'in' | 'out') {
     setMsg(null)
@@ -243,6 +255,29 @@ export function MoveStockClient() {
         <p className="text-center text-xs text-emerald-700 font-medium bg-emerald-50 border border-emerald-100 rounded-xl py-2 px-3">
           {scanLine}
         </p>
+      )}
+      {pendingScan && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 space-y-2">
+          <p className="text-xs text-blue-800">
+            스캔 확인 대기: <span className="font-semibold">{pendingScan.itemName}</span> · {pendingScan.code}
+          </p>
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setPendingScan(null)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={confirmPendingScan}
+              className="rounded-lg bg-blue-600 text-white px-2.5 py-1 text-xs font-medium"
+            >
+              확인
+            </button>
+          </div>
+        </div>
       )}
       {lastScanAt && (
         <p className="text-center text-[11px] text-emerald-700 bg-emerald-50/70 border border-emerald-100 rounded-xl py-1.5 px-3">
