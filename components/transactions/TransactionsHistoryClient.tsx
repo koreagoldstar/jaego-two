@@ -135,6 +135,19 @@ export function TransactionsHistoryClient({ rows }: { rows: HistoryRow[] }) {
                       className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5"
                     />
                   </label>
+                  {tx.direction === 'out' ? (
+                    <label className="block text-xs text-slate-500">
+                      출고 수량
+                      <input
+                        name="amount"
+                        type="number"
+                        min={1}
+                        defaultValue={tx.amount}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5"
+                        required
+                      />
+                    </label>
+                  ) : null}
                   <div className="flex gap-2 justify-end pt-1">
                     <button
                       type="button"

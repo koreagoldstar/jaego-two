@@ -24,13 +24,27 @@ export async function updateStockTransactionAction(id: string, formData: FormDat
 
   const note = String(formData.get('note') ?? '').trim()
   const project = String(formData.get('project') ?? '').trim()
+  const amountRaw = String(formData.get('amount') ?? '').trim()
+  const parsedAmount = parseInt(amountRaw || '0', 10)
   const createdRaw = String(formData.get('created_at') ?? '').trim()
   const created_at = parseDatetimeLocalToIso(createdRaw)
   if (!created_at) return { ok: false as const, error: '날짜·시간을 확인하세요' }
 
+  const { data: tx, error: txError } = await supabase
+    .from('stock_transactions')
+    .select('direction, amount')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (txError) return { ok: false as const, error: txError.message }
+  if (!tx) return { ok: false as const, error: '대상을 찾을 수 없습니다' }
+
+  const nextAmount =
+    tx.direction === 'out' ? Math.max(1, Number.isFinite(parsedAmount) ? parsedAmount : tx.amount) : tx.amount
+
   const { error } = await supabase
     .from('stock_transactions')
-    .update({ note, project, created_at })
+    .update({ note, project, created_at, amount: nextAmount })
     .eq('id', id)
     .eq('user_id', user.id)
 
