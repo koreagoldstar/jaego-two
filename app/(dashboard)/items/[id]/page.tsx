@@ -102,12 +102,17 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
         )}
       </div>
 
-      {!lotsTableMissing && (
-        <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
-          <h2 className="text-base font-semibold text-slate-900">재고 대사 모드</h2>
+      <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
+        <h2 className="text-base font-semibold text-slate-900">재고 대사 모드</h2>
+        {lotsTableMissing ? (
+          <p className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+            입고 단위 테이블(item_stock_lots)을 찾을 수 없어 재고 대사 모드를 사용할 수 없습니다. 마이그레이션(007·009)을
+            적용한 뒤 다시 확인해 주세요.
+          </p>
+        ) : (
           <ItemStockReconcileClient itemId={item.id} currentCodes={lotCodes} />
-        </div>
-      )}
+        )}
+      </div>
 
       <Link
         href={`/move?item=${item.id}`}
