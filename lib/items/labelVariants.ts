@@ -1,15 +1,10 @@
 import type { Item } from '@/lib/supabase/types'
+import { withUnitSuffix } from '@/lib/items/lotCodes'
 
 export type ItemLabelVariant = {
   index: number
   barcode: string | null
   payload: string | null
-}
-
-function withUnitSuffix(base: string, index: number, total: number) {
-  if (!base) return ''
-  if (total <= 1) return base
-  return `${base}-${String(index).padStart(3, '0')}`
 }
 
 export function buildItemLabelVariants(item: Item, separator: string): ItemLabelVariant[] {

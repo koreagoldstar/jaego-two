@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { generateBarcodeValue } from '@/lib/items/codeGeneratorsServer'
+import { buildUnitLotCodes } from '@/lib/items/lotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { redirect } from 'next/navigation'
 
@@ -90,14 +91,15 @@ export async function updateItemAction(itemId: string, formData: FormData) {
     await supabase.from('item_stock_lots').delete().eq('item_id', itemId).eq('user_id', user.id)
 
     if (quantity > 0) {
-      const { error: lotErr } = await supabase.from('item_stock_lots').insert({
+      const lotRows = buildUnitLotCodes(resolvedBarcode, quantity).map(code => ({
         user_id: user.id,
         item_id: itemId,
-        quantity,
-        lot_code: resolvedBarcode,
+        quantity: 1,
+        lot_code: code,
         note: '',
         created_at: meta.created_at,
-      })
+      }))
+      const { error: lotErr } = await supabase.from('item_stock_lots').insert(lotRows)
       if (lotErr) {
         redirect(`/items/${itemId}/edit?error=` + encodeURIComponent(lotErr.message))
       }

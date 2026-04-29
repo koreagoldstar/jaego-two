@@ -9,6 +9,14 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values.map(v => v.trim()).filter(Boolean)))
 }
 
+function parseUnitSuffix(code: string): { base: string; index: number } | null {
+  const m = /^(.*)-(\d{3})$/.exec(code)
+  if (!m) return null
+  const index = parseInt(m[2], 10)
+  if (!Number.isFinite(index) || index < 1) return null
+  return { base: m[1], index }
+}
+
 /** 사용자 품목 중 스캔 문자열로 id 조회 (인쇄 라벨 payload와 동일 규칙에 맞춤) */
 export async function findItemIdByBarcode(
   supabase: SupabaseClient,
@@ -22,7 +30,7 @@ export async function findItemIdByBarcode(
     supabase.from('items').select('id').eq('user_id', userId)
 
   const safeCode = to1DBarcodeSafeString(code)
-  const barcodeCandidates = unique([
+  const rawCandidates = unique([
     code,
     safeCode,
     code.toUpperCase(),
@@ -30,6 +38,32 @@ export async function findItemIdByBarcode(
     stripUnitSuffix(code),
     stripUnitSuffix(safeCode),
   ])
+  const barcodeCandidates = rawCandidates
+
+  for (const candidate of barcodeCandidates) {
+    const { data: byLot, error: lotError } = await supabase
+      .from('item_stock_lots')
+      .select('item_id')
+      .eq('user_id', userId)
+      .eq('lot_code', candidate)
+      .limit(1)
+      .maybeSingle()
+    if (!lotError && byLot?.item_id) return byLot.item_id
+  }
+
+  for (const candidate of barcodeCandidates) {
+    const parsed = parseUnitSuffix(candidate)
+    if (!parsed) continue
+    const { data: byBaseLot, error: baseLotError } = await supabase
+      .from('item_stock_lots')
+      .select('item_id, quantity')
+      .eq('user_id', userId)
+      .eq('lot_code', parsed.base)
+      .gte('quantity', parsed.index)
+      .limit(1)
+      .maybeSingle()
+    if (!baseLotError && byBaseLot?.item_id) return byBaseLot.item_id
+  }
 
   for (const candidate of barcodeCandidates) {
     const { data: byBarcode } = await base().eq('barcode_code', candidate).maybeSingle()

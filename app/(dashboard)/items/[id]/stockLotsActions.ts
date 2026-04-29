@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { buildUnitLotCodes } from '@/lib/items/lotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
 
@@ -42,14 +43,18 @@ export async function addItemStockLotAction(itemId: string, formData: FormData) 
   const createdRaw = String(formData.get('created_at') ?? '').trim()
   const created_at = parseDatetimeLocalToIso(createdRaw) ?? new Date().toISOString()
 
-  const { error } = await supabase.from('item_stock_lots').insert({
-    user_id: user.id,
-    item_id: itemId,
-    quantity: qty,
-    lot_code,
-    note,
-    created_at,
-  })
+  const insertRows = qty === 1
+    ? [{ user_id: user.id, item_id: itemId, quantity: 1, lot_code, note, created_at }]
+    : buildUnitLotCodes(lot_code, qty).map(code => ({
+        user_id: user.id,
+        item_id: itemId,
+        quantity: 1,
+        lot_code: code,
+        note,
+        created_at,
+      }))
+
+  const { error } = await supabase.from('item_stock_lots').insert(insertRows)
 
   if (error) {
     if (pgUniqueViolation(error)) {
@@ -89,9 +94,11 @@ export async function updateItemStockLotAction(
   const created_at = parseDatetimeLocalToIso(createdRaw)
   if (!created_at) return { ok: false as const, error: '날짜·시간을 확인하세요' }
 
+  const unitCodes = qty === 1 ? [lot_code] : buildUnitLotCodes(lot_code, qty)
+
   const { error } = await supabase
     .from('item_stock_lots')
-    .update({ quantity: qty, lot_code, note, created_at })
+    .update({ quantity: 1, lot_code: unitCodes[0], note, created_at })
     .eq('id', lotId)
     .eq('item_id', itemId)
     .eq('user_id', user.id)
@@ -104,6 +111,27 @@ export async function updateItemStockLotAction(
       ? '입고 단위 테이블이 없습니다. Supabase에서 007·009 마이그레이션을 실행하세요.'
       : error.message
     return { ok: false as const, error: msg }
+  }
+
+  if (unitCodes.length > 1) {
+    const extraRows = unitCodes.slice(1).map(code => ({
+      user_id: user.id,
+      item_id: itemId,
+      quantity: 1,
+      lot_code: code,
+      note,
+      created_at,
+    }))
+    const { error: extraError } = await supabase.from('item_stock_lots').insert(extraRows)
+    if (extraError) {
+      if (pgUniqueViolation(extraError)) {
+        return { ok: false as const, error: '이 품목에 동일한 QR 입고가 이미 있습니다.' }
+      }
+      const msg = isMissingItemStockLotsTable(extraError)
+        ? '입고 단위 테이블이 없습니다. Supabase에서 007·009 마이그레이션을 실행하세요.'
+        : extraError.message
+      return { ok: false as const, error: msg }
+    }
   }
   revalidatePath(`/items/${itemId}`)
   revalidatePath('/items')

@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { generateBarcodeValue } from '@/lib/items/codeGeneratorsServer'
+import { buildUnitLotCodes } from '@/lib/items/lotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { redirect } from 'next/navigation'
 
@@ -71,14 +72,16 @@ export async function createItemAction(formData: FormData) {
   }
 
   if (quantity > 0 && inserted?.id) {
-    const { error: lotErr } = await supabase.from('item_stock_lots').insert({
+    const lotCodes = buildUnitLotCodes(resolvedBarcode, quantity)
+    const lotRows = lotCodes.map(code => ({
       user_id: user.id,
       item_id: inserted.id,
-      quantity,
-      lot_code: resolvedBarcode,
+      quantity: 1,
+      lot_code: code,
       note: '',
       created_at: inserted.created_at,
-    })
+    }))
+    const { error: lotErr } = await supabase.from('item_stock_lots').insert(lotRows)
     if (lotErr) {
       if (isMissingItemStockLotsTable(lotErr)) {
         const { error: upErr } = await supabase
@@ -169,14 +172,17 @@ export async function createItemsBatchAction(formData: FormData) {
   }
 
   if (quantityEach > 0 && createdRows?.length) {
-    const lotRows = createdRows.map(row => ({
-      user_id: user.id,
-      item_id: row.id,
-      quantity: quantityEach,
-      lot_code: (row.barcode_code ?? '').trim() || `lot-${row.id.slice(0, 8)}`,
-      note: '',
-      created_at: row.created_at,
-    }))
+    const lotRows = createdRows.flatMap(row => {
+      const baseCode = (row.barcode_code ?? '').trim() || `lot-${row.id.slice(0, 8)}`
+      return buildUnitLotCodes(baseCode, quantityEach).map(code => ({
+        user_id: user.id,
+        item_id: row.id,
+        quantity: 1,
+        lot_code: code,
+        note: '',
+        created_at: row.created_at,
+      }))
+    })
     const { error: lotErr } = await supabase.from('item_stock_lots').insert(lotRows)
     if (lotErr) {
       if (isMissingItemStockLotsTable(lotErr)) {
