@@ -166,6 +166,7 @@ export function MoveStockClient() {
     if (!selectedProject || !selectedId) return null
     return projectRemainingMap[`${selectedProject}::${selectedId}`] ?? null
   }, [selectedProject, selectedId, projectRemainingMap])
+  const outBlockedByRemaining = selectedProject && selectedRemaining !== null && selectedRemaining <= 0
   const projectItems = useMemo(() => {
     if (!selectedProject) return []
     const ids = new Set(projectItemMap[selectedProject] ?? [])
@@ -177,6 +178,10 @@ export function MoveStockClient() {
     setMsg(null)
     if (!selectedId || amount < 1) {
       setMsg({ type: 'err', text: '스캔으로 품목을 먼저 선택하세요.' })
+      return
+    }
+    if (direction === 'out' && outBlockedByRemaining) {
+      setMsg({ type: 'err', text: '프로젝트 예정 잔여가 0 이하라 출고할 수 없습니다.' })
       return
     }
     const requestAmount = direction === 'out' ? 1 : amount
@@ -292,10 +297,12 @@ export function MoveStockClient() {
             <option value="">선택…</option>
             {pickerItems.map(i => {
               const remaining = selectedProject ? projectRemainingMap[`${selectedProject}::${i.id}`] : undefined
+              const blocked = typeof remaining === 'number' && remaining <= 0
               return (
                 <option key={i.id} value={i.id}>
                   {i.name} (재고 {i.quantity}
-                  {typeof remaining === 'number' ? ` / 잔여 ${remaining}` : ''})
+                  {typeof remaining === 'number' ? ` / 잔여 ${remaining}` : ''}
+                  {blocked ? ' / 출고잠금' : ''})
                 </option>
               )
             })}
@@ -398,13 +405,18 @@ export function MoveStockClient() {
         </button>
         <button
           type="button"
-          disabled={busy || !selectedId}
+          disabled={busy || !selectedId || Boolean(outBlockedByRemaining)}
           onClick={() => run('out')}
           className="rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-semibold py-5 text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           출고
         </button>
       </div>
+      {outBlockedByRemaining && (
+        <p className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1.5">
+          이 품목은 프로젝트 예정 잔여가 0 이하라 출고가 잠겨 있습니다.
+        </p>
+      )}
     </div>
   )
 }
