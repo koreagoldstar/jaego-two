@@ -32,7 +32,7 @@ export async function updateStockTransactionAction(id: string, formData: FormDat
 
   const { data: tx, error: txError } = await supabase
     .from('stock_transactions')
-    .select('direction, amount')
+    .select('direction, amount, item_id')
     .eq('id', id)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -41,6 +41,22 @@ export async function updateStockTransactionAction(id: string, formData: FormDat
 
   const nextAmount =
     tx.direction === 'out' ? Math.max(1, Number.isFinite(parsedAmount) ? parsedAmount : tx.amount) : tx.amount
+
+  if (tx.direction === 'out' && nextAmount !== tx.amount) {
+    const delta = nextAmount - tx.amount
+    const correctionDirection = delta > 0 ? 'out' : 'in'
+    const correctionAmount = Math.abs(delta)
+    const { error: correctionError } = await supabase.rpc('apply_stock_move', {
+      p_item_id: tx.item_id,
+      p_direction: correctionDirection,
+      p_amount: correctionAmount,
+      p_note: '[이력수정보정]',
+      p_project: project || null,
+    })
+    if (correctionError) {
+      return { ok: false as const, error: `재고 보정 실패: ${correctionError.message}` }
+    }
+  }
 
   const { error } = await supabase
     .from('stock_transactions')

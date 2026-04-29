@@ -114,6 +114,10 @@ export function MoveStockClient() {
       setMsg({ type: 'err', text: '스캔으로 품목을 먼저 선택하세요.' })
       return
     }
+    if (direction === 'out' && amount > 1) {
+      const ok = window.confirm(`출고 수량 ${amount}개로 처리할까요?`)
+      if (!ok) return
+    }
     setBusy(true)
     const supabase = createClient()
     const { data, error } = await supabase.rpc('apply_stock_move', {
@@ -131,6 +135,7 @@ export function MoveStockClient() {
     if (data) {
       setMsg({ type: 'ok', text: direction === 'in' ? '입고 완료' : '출고 완료' })
       setNote('')
+      setAmount(1)
       await load()
     }
   }
