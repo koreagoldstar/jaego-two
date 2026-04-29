@@ -114,16 +114,13 @@ export function MoveStockClient() {
       setMsg({ type: 'err', text: '스캔으로 품목을 먼저 선택하세요.' })
       return
     }
-    if (direction === 'out' && amount > 1) {
-      const ok = window.confirm(`출고 수량 ${amount}개로 처리할까요?`)
-      if (!ok) return
-    }
+    const requestAmount = direction === 'out' ? 1 : amount
     setBusy(true)
     const supabase = createClient()
     const { data, error } = await supabase.rpc('apply_stock_move', {
       p_item_id: selectedId,
       p_direction: direction,
-      p_amount: amount,
+      p_amount: requestAmount,
       p_note: note.trim() || null,
       p_project: project.trim() || null,
     })
@@ -133,7 +130,7 @@ export function MoveStockClient() {
       return
     }
     if (data) {
-      setMsg({ type: 'ok', text: direction === 'in' ? '입고 완료' : '출고 완료' })
+      setMsg({ type: 'ok', text: direction === 'in' ? '입고 완료' : '출고 완료 (스캔 1개 기준)' })
       setNote('')
       setAmount(1)
       await load()
@@ -271,6 +268,7 @@ export function MoveStockClient() {
           onChange={e => setAmount(Math.max(1, parseInt(e.target.value, 10) || 1))}
           className="w-full rounded-xl border border-slate-200 px-3 py-3 text-lg font-semibold tabular-nums"
         />
+        <p className="text-xs text-slate-500">출고 버튼은 안전을 위해 항상 1개만 처리됩니다.</p>
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">

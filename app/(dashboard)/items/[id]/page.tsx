@@ -6,6 +6,7 @@ import { buildItemLabelVariants } from '@/lib/items/labelVariants'
 import { ItemLabelStockListClient } from '@/components/items/ItemLabelStockListClient'
 import { ItemStockLegacyClient } from '@/components/items/ItemStockLegacyClient'
 import { ItemStockLotsClient } from '@/components/items/ItemStockLotsClient'
+import { ItemStockReconcileClient } from '@/components/items/ItemStockReconcileClient'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { Pencil } from 'lucide-react'
 
@@ -39,6 +40,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
   const lotsTableMissing = Boolean(lotsErr && isMissingItemStockLotsTable(lotsErr))
   const lotsLoadError = lotsErr && !lotsTableMissing ? lotsErr.message : null
   const lots = (lotsTableMissing ? [] : (lotRows ?? [])) as ItemStockLot[]
+  const lotCodes = lots.map(l => (l.lot_code ?? '').trim()).filter(Boolean)
 
   return (
     <div className="space-y-4 max-w-lg">
@@ -99,6 +101,13 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
           />
         )}
       </div>
+
+      {!lotsTableMissing && (
+        <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
+          <h2 className="text-base font-semibold text-slate-900">재고 대사 모드</h2>
+          <ItemStockReconcileClient itemId={item.id} currentCodes={lotCodes} />
+        </div>
+      )}
 
       <Link
         href={`/move?item=${item.id}`}
