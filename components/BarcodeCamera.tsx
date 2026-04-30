@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader, BrowserCodeReader } from '@zxing/browser'
-import { BarcodeFormat, DecodeHintType, type Result } from '@zxing/library'
+import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import { Camera, ImageIcon, Loader2, ScanLine } from 'lucide-react'
 import { normalizeBarcodePayload } from '@/lib/items/barcodePayload'
 
@@ -11,7 +11,8 @@ const UPSCALE_MIN = 1.5
 const UPSCALE_MAX = 2.5
 /** 사진 파일: 가느다란 막대 인식을 위해 조금 더 키움 */
 const PHOTO_UPSCALE_MAX = 3
-const DECODE_INTERVAL_MS = 72
+/** Chrome 등: 네이티브 BarcodeDetector 보조 (ZXing과 병행) */
+const NATIVE_DETECT_INTERVAL_MS = 110
 
 type NativeDetectedCode = { rawValue?: string }
 type NativeBarcodeDetector = {
@@ -56,64 +57,6 @@ async function detectWithNativeDetector(
   } catch {
     return null
   }
-}
-
-function decodeVideoFrame(
-  reader: BrowserMultiFormatReader,
-  videoEl: HTMLVideoElement,
-  canvas: HTMLCanvasElement,
-  ctx: CanvasRenderingContext2D,
-  frameIndex: number,
-): string | null {
-  const vw = videoEl.videoWidth
-  const vh = videoEl.videoHeight
-  if (!vw || !vh) return null
-
-  const scale = computeDecodeScale(vw, vh, UPSCALE_MAX)
-  const drawAndDecode = (sx: number, sy: number, sw: number, sh: number, threshold?: number) => {
-    canvas.width = Math.round(sw * scale)
-    canvas.height = Math.round(sh * scale)
-    ctx.imageSmoothingEnabled = false
-    if (typeof threshold === 'number') {
-      drawBinarized(ctx, videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height, threshold)
-    } else {
-      ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height)
-    }
-    return tryDecodeCanvas(reader, canvas)
-  }
-
-  const full = () => drawAndDecode(0, 0, vw, vh)
-  const fullBW = (t: number) => drawAndDecode(0, 0, vw, vh, t)
-  const centerSquare = () => {
-    const size = Math.min(vw, vh) * 0.66
-    const sx = (vw - size) / 2
-    const sy = (vh - size) / 2
-    return drawAndDecode(sx, sy, size, size)
-  }
-  const centerWideBand = (bw: number) => {
-    const sw = vw * 0.9
-    const sh = vh * bw
-    const sx = (vw - sw) / 2
-    const sy = (vh - sh) / 2
-    return drawAndDecode(sx, sy, sw, sh)
-  }
-
-  const attempts: Array<() => string | null> = [
-    full,
-    () => fullBW(128),
-    () => centerWideBand(0.32),
-    centerSquare,
-    () => fullBW(112),
-    () => fullBW(144),
-    () => centerWideBand(0.45),
-  ]
-
-  const offset = frameIndex % attempts.length
-  for (let i = 0; i < attempts.length; i++) {
-    const decoded = attempts[(offset + i) % attempts.length]()
-    if (decoded) return decoded
-  }
-  return null
 }
 
 function computeDecodeScale(w: number, h: number, maxScale = UPSCALE_MAX): number {
@@ -317,17 +260,15 @@ export function BarcodeCamera({
     if (scanMode !== 'live') return
 
     const reader = new BrowserMultiFormatReader(buildScannerHints(), {
-      delayBetweenScanAttempts: 60,
+      delayBetweenScanAttempts: 50,
       delayBetweenScanSuccess: 280,
       tryPlayVideoTimeout: 12_000,
     })
     let cancelled = false
-    let attachedVideo: HTMLVideoElement | null = null
     let stream: MediaStream | null = null
-    let decodeTimer: ReturnType<typeof setInterval> | undefined
+    let scanControls: { stop: () => void } | null = null
+    let nativeTimer: number | undefined
     const nativeDetector = createNativeDetector()
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })
 
     const pickBackDeviceId = async () => {
       let envDeviceId: string | undefined
@@ -356,24 +297,13 @@ export function BarcodeCamera({
       return scored[0]?.id
     }
 
-    const tryPlayVideoWithTimeout = (videoEl: HTMLVideoElement) =>
-      Promise.race([
-        BrowserCodeReader.tryPlayVideo(videoEl),
-        new Promise<boolean>((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), 12_000),
-        ),
-      ])
-
     const startDecode = async () => {
       const videoEl = videoRef.current
-      if (!videoEl || cancelled || !ctx) return
-      attachedVideo = videoEl
-
-      const onResult = (result: Result | undefined) => {
-        if (cancelled || !result) return
-        const text = normalizeBarcodePayload(result.getText())
-        if (!text) return
-        void emitDecoded(text)
+      if (!videoEl || cancelled) {
+        if (!cancelled) {
+          setStatus('카메라 영역을 불러오지 못했습니다. 페이지를 새로고침 후 다시 시도하세요.')
+        }
+        return
       }
 
       const constraintAttempts: MediaStreamConstraints[] = [
@@ -399,32 +329,9 @@ export function BarcodeCamera({
           audio: false,
         },
         { video: { facingMode: 'environment' }, audio: false },
+        { video: { facingMode: 'user' }, audio: false },
+        { video: true, audio: false },
       ]
-
-      const startCanvasLoop = () => {
-        let frameIndex = 0
-        let decoding = false
-        decodeTimer = setInterval(() => {
-          if (decoding) return
-          if (cancelled || !stream) return
-          decoding = true
-          void (async () => {
-            try {
-              let decoded: string | null = null
-              if (frameIndex % 2 === 0) {
-                decoded = await detectWithNativeDetector(nativeDetector, videoEl)
-              }
-              if (!decoded) {
-                decoded = decodeVideoFrame(reader, videoEl, canvas, ctx, frameIndex)
-              }
-              frameIndex += 1
-              if (decoded) onResult({ getText: () => decoded } as Result)
-            } finally {
-              decoding = false
-            }
-          })()
-        }, DECODE_INTERVAL_MS)
-      }
 
       for (const constraints of constraintAttempts) {
         try {
@@ -449,32 +356,52 @@ export function BarcodeCamera({
         }
       }
 
-      BrowserCodeReader.addVideoSource(videoEl, stream)
       try {
-        await tryPlayVideoWithTimeout(videoEl)
+        scanControls = await reader.decodeFromStream(stream, videoEl, (result, _err) => {
+          if (cancelled || !result) return
+          const text = normalizeBarcodePayload(result.getText())
+          if (!text) return
+          void emitDecoded(text)
+        })
       } catch {
-        setStatus('영상을 시작하지 못했습니다.')
+        setStatus('실시간 스캔을 시작하지 못했습니다. 「사진으로 읽기」로 촬영해 보세요.')
         stream.getTracks().forEach(t => t.stop())
         stream = null
         BrowserCodeReader.cleanVideoSource(videoEl)
         return
       }
 
+      if (nativeDetector) {
+        nativeTimer = window.setInterval(() => {
+          if (cancelled || !videoEl.srcObject) return
+          void detectWithNativeDetector(nativeDetector, videoEl).then(t => {
+            if (cancelled || !t) return
+            void emitDecoded(t)
+          })
+        }, NATIVE_DETECT_INTERVAL_MS)
+      }
+
       setStatus('코드를 화면 중앙에 맞추면 바로 인식합니다 · 밝게·가깝게')
-      startCanvasLoop()
     }
 
     setStatus('카메라 시작 중…')
-    void startDecode()
+    const raf = window.requestAnimationFrame(() => {
+      if (!cancelled) void startDecode()
+    })
 
     return () => {
       cancelled = true
-      if (decodeTimer !== undefined) clearInterval(decodeTimer)
-      if (stream) {
+      window.cancelAnimationFrame(raf)
+      if (nativeTimer !== undefined) window.clearInterval(nativeTimer)
+      if (scanControls) {
+        scanControls.stop()
+      } else if (stream) {
         stream.getTracks().forEach(t => t.stop())
-        stream = null
       }
-      if (attachedVideo) BrowserCodeReader.cleanVideoSource(attachedVideo)
+      scanControls = null
+      stream = null
+      const el = videoRef.current
+      if (el) BrowserCodeReader.cleanVideoSource(el)
     }
   }, [scanMode, emitDecoded])
 
