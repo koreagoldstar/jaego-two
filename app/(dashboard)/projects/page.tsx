@@ -127,6 +127,14 @@ export default async function ProjectsPage() {
 
       <ProjectPlanMultiForm
         items={items.map(item => ({ id: item.id, name: item.name, quantity: item.quantity ?? 0 }))}
+        projects={projectNames.map(projectName => ({
+          project_name: projectName,
+          install_date: projectInstallDate.get(projectName) ?? null,
+          rows: (grouped.get(projectName) ?? []).map(row => ({
+            item_id: row.item_id,
+            planned_qty: row.planned_qty,
+          })),
+        }))}
       />
 
       <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm flex flex-wrap items-center gap-2">

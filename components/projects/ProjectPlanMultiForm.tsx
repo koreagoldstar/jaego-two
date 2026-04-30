@@ -17,18 +17,53 @@ type Row = {
   planned_qty: number
 }
 
-export function ProjectPlanMultiForm({ items }: { items: ItemOption[] }) {
+type ProjectSeed = {
+  project_name: string
+  install_date: string | null
+  rows: Array<{ item_id: string; planned_qty: number }>
+}
+
+type Props = {
+  items: ItemOption[]
+  projects: ProjectSeed[]
+}
+
+export function ProjectPlanMultiForm({ items, projects }: Props) {
   const router = useRouter()
   const formRef = useRef<HTMLFormElement>(null)
   const [pending, startTransition] = useTransition()
+  const [projectName, setProjectName] = useState('')
+  const [installDate, setInstallDate] = useState('')
   const [rows, setRows] = useState<Row[]>([{ id: crypto.randomUUID(), item_id: '', planned_qty: 0 }])
   const resetRows = () => setRows([{ id: crypto.randomUUID(), item_id: '', planned_qty: 0 }])
+
+  const loadProject = (name: string) => {
+    const matched = projects.find(p => p.project_name === name.trim())
+    if (!matched) {
+      setInstallDate('')
+      resetRows()
+      return
+    }
+    setInstallDate(matched.install_date ?? '')
+    if (matched.rows.length === 0) {
+      resetRows()
+      return
+    }
+    setRows(
+      matched.rows.map(row => ({
+        id: crypto.randomUUID(),
+        item_id: row.item_id,
+        planned_qty: row.planned_qty,
+      })),
+    )
+  }
 
   const action = (formData: FormData) => {
     startTransition(async () => {
       await saveProjectPlanBatchAction(formData)
-      formRef.current?.reset()
-      resetRows()
+      const savedProjectName = String(formData.get('project_name') ?? '').trim()
+      setProjectName(savedProjectName)
+      loadProject(savedProjectName)
       router.refresh()
     })
   }
@@ -39,11 +74,37 @@ export function ProjectPlanMultiForm({ items }: { items: ItemOption[] }) {
       <div className="grid gap-3 md:grid-cols-3">
         <div>
           <label className="block text-sm text-slate-600 mb-1">프로젝트명</label>
-          <input name="project_name" required className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+          <input
+            name="project_name"
+            required
+            list="project-name-options"
+            value={projectName}
+            onChange={e => {
+              const next = e.target.value
+              setProjectName(next)
+              if (projects.some(project => project.project_name === next.trim())) {
+                loadProject(next)
+              }
+            }}
+            onBlur={() => loadProject(projectName)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+            placeholder="프로젝트명을 입력하거나 기존 프로젝트를 선택"
+          />
+          <datalist id="project-name-options">
+            {projects.map(project => (
+              <option key={project.project_name} value={project.project_name} />
+            ))}
+          </datalist>
         </div>
         <div>
           <label className="block text-sm text-slate-600 mb-1">설치 일정</label>
-          <input name="install_date" type="date" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+          <input
+            name="install_date"
+            type="date"
+            value={installDate}
+            onChange={e => setInstallDate(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+          />
         </div>
       </div>
 
@@ -104,6 +165,15 @@ export function ProjectPlanMultiForm({ items }: { items: ItemOption[] }) {
           <Plus className="w-4 h-4" />
           품목 추가
         </button>
+        {projectName.trim() ? (
+          <button
+            type="button"
+            onClick={() => loadProject(projectName)}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700"
+          >
+            프로젝트 불러오기
+          </button>
+        ) : null}
       </div>
 
       <p className="text-xs text-slate-500">수량 0으로 저장하면 해당 프로젝트-품목 예정치가 삭제됩니다.</p>
