@@ -1,5 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
-import { deleteProjectPlanAction, updateProjectPlanEntryAction } from '@/app/(dashboard)/projects/actions'
+import {
+  deleteProjectPlanAction,
+  saveProjectPlanAction,
+  updateProjectPlanEntryAction,
+} from '@/app/(dashboard)/projects/actions'
 import type { Item } from '@/lib/supabase/types'
 import { ProjectPlanMultiForm } from '@/components/projects/ProjectPlanMultiForm'
 
@@ -169,6 +173,47 @@ export default async function ProjectsPage() {
                     설치 일정: {projectInstallDate.get(projectName) || '미정'}
                   </span>
                 </div>
+                <form action={saveProjectPlanAction} className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 md:grid-cols-[1fr_120px_auto]">
+                  <input type="hidden" name="project_name" value={projectName} />
+                  <input type="hidden" name="install_date" value={projectInstallDate.get(projectName) ?? ''} />
+                  <div>
+                    <label className="sr-only" htmlFor={`add-item-${projectName}`}>
+                      품목 추가
+                    </label>
+                    <select
+                      id={`add-item-${projectName}`}
+                      name="item_id"
+                      required
+                      defaultValue=""
+                      className="w-full rounded-md border border-slate-200 px-2 py-2 text-sm bg-white"
+                    >
+                      <option value="" disabled>
+                        이 프로젝트에 품목 추가…
+                      </option>
+                      {items.map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="sr-only" htmlFor={`add-qty-${projectName}`}>
+                      사용예정 수량
+                    </label>
+                    <input
+                      id={`add-qty-${projectName}`}
+                      name="planned_qty"
+                      type="number"
+                      min={0}
+                      defaultValue={1}
+                      className="w-full rounded-md border border-slate-200 px-2 py-2 text-sm text-right tabular-nums bg-white"
+                    />
+                  </div>
+                  <button type="submit" className="rounded-md bg-emerald-600 text-white px-3 py-2 text-sm font-medium whitespace-nowrap">
+                    품목 추가
+                  </button>
+                </form>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-sm">
                     <thead>
