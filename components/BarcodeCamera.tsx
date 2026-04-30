@@ -268,6 +268,8 @@ export function BarcodeCamera({
     let stream: MediaStream | null = null
     let scanControls: { stop: () => void } | null = null
     let nativeTimer: number | undefined
+    /** cleanup 시 videoRef와 동일 노드를 쓰기 위해 스캔 시작 시점 요소를 보관 */
+    let videoCleanup: HTMLVideoElement | null = null
     const nativeDetector = createNativeDetector()
 
     const pickBackDeviceId = async () => {
@@ -305,6 +307,7 @@ export function BarcodeCamera({
         }
         return
       }
+      videoCleanup = videoEl
 
       const constraintAttempts: MediaStreamConstraints[] = [
         {
@@ -357,7 +360,7 @@ export function BarcodeCamera({
       }
 
       try {
-        scanControls = await reader.decodeFromStream(stream, videoEl, (result, _err) => {
+        scanControls = await reader.decodeFromStream(stream, videoEl, result => {
           if (cancelled || !result) return
           const text = normalizeBarcodePayload(result.getText())
           if (!text) return
@@ -400,8 +403,10 @@ export function BarcodeCamera({
       }
       scanControls = null
       stream = null
-      const el = videoRef.current
-      if (el) BrowserCodeReader.cleanVideoSource(el)
+      if (videoCleanup) {
+        BrowserCodeReader.cleanVideoSource(videoCleanup)
+        videoCleanup = null
+      }
     }
   }, [scanMode, emitDecoded])
 
