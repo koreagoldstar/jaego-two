@@ -1,9 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { BrowserMultiFormatReader, BrowserCodeReader } from '@zxing/browser'
+import { BrowserMultiFormatReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import { Camera, ImageIcon, Loader2, ScanLine } from 'lucide-react'
+import QrScanner from 'qr-scanner'
 import { normalizeBarcodePayload } from '@/lib/items/barcodePayload'
 
 const UPSCALE_CANVAS_MAX = 2560
@@ -11,52 +12,21 @@ const UPSCALE_MIN = 1.5
 const UPSCALE_MAX = 2.5
 /** 사진 파일: 가느다란 막대 인식을 위해 조금 더 키움 */
 const PHOTO_UPSCALE_MAX = 3
-/** Chrome 등: 네이티브 BarcodeDetector 보조 (ZXing과 병행) */
-const NATIVE_DETECT_INTERVAL_MS = 110
+const STATUS_PHOTO_RECOMMENDED =
+  '휴대폰 기본 카메라로 QR을 찍으면 잘 읽힙니다. 아래「휴대폰 카메라로 촬영」을 누르세요.'
 
-type NativeDetectedCode = { rawValue?: string }
-type NativeBarcodeDetector = {
-  detect: (input: ImageBitmapSource) => Promise<NativeDetectedCode[]>
+/** 터치·모바일 UA: 브라우저 미리보기보다 파일 촬영이 유리 */
+function prefersNativeCameraCapture(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+  const coarse =
+    typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true
+  return ua || coarse
 }
 
-function createNativeDetector(): NativeBarcodeDetector | null {
-  const DetectorCtor = (globalThis as { BarcodeDetector?: new (opts?: { formats?: string[] }) => NativeBarcodeDetector })
-    .BarcodeDetector
-  if (!DetectorCtor) return null
-  try {
-    return new DetectorCtor({
-      formats: [
-        'qr_code',
-        'code_128',
-        'code_39',
-        'ean_13',
-        'ean_8',
-        'upc_a',
-        'upc_e',
-        'itf',
-        'codabar',
-      ],
-    })
-  } catch {
-    return null
-  }
-}
-
-async function detectWithNativeDetector(
-  detector: NativeBarcodeDetector | null,
-  videoEl: HTMLVideoElement,
-): Promise<string | null> {
-  if (!detector) return null
-  try {
-    const detected = await detector.detect(videoEl)
-    for (const row of detected) {
-      const text = normalizeBarcodePayload(row.rawValue ?? '')
-      if (text) return text
-    }
-    return null
-  } catch {
-    return null
-  }
+function ensureQrWorkerPath() {
+  if (typeof window === 'undefined') return
+  QrScanner.WORKER_PATH = `${window.location.origin}/qr-scanner-worker.min.js`
 }
 
 function computeDecodeScale(w: number, h: number, maxScale = UPSCALE_MAX): number {
@@ -79,6 +49,24 @@ function buildScannerHints(): Map<DecodeHintType, unknown> {
     BarcodeFormat.DATA_MATRIX,
     BarcodeFormat.AZTEC,
     BarcodeFormat.PDF_417,
+    BarcodeFormat.CODE_128,
+    BarcodeFormat.CODE_39,
+    BarcodeFormat.CODE_93,
+    BarcodeFormat.CODABAR,
+    BarcodeFormat.EAN_13,
+    BarcodeFormat.EAN_8,
+    BarcodeFormat.ITF,
+    BarcodeFormat.UPC_A,
+    BarcodeFormat.UPC_E,
+  ])
+  hints.set(DecodeHintType.TRY_HARDER, true)
+  return hints
+}
+
+/** 실시간 영상: QR은 QrScanner가 담당 — ZXing은 1D·EAN 등만 (중복 QR 디코드 방지) */
+function build1DBarcodeHints(): Map<DecodeHintType, unknown> {
+  const hints = new Map<DecodeHintType, unknown>()
+  hints.set(DecodeHintType.POSSIBLE_FORMATS, [
     BarcodeFormat.CODE_128,
     BarcodeFormat.CODE_39,
     BarcodeFormat.CODE_93,
@@ -185,6 +173,15 @@ async function decodeImageFile(
 ): Promise<string> {
   const url = URL.createObjectURL(file)
   try {
+    ensureQrWorkerPath()
+    try {
+      const qr = await QrScanner.scanImage(file, { returnDetailedScanResult: true })
+      const q = normalizeBarcodePayload(qr.data)
+      if (q) return q
+    } catch {
+      /* QR 아님 또는 실패 → ZXing·1D 파이프라인 */
+    }
+
     try {
       const result = await reader.decodeFromImageUrl(url)
       const text = normalizeBarcodePayload(result.getText())
@@ -214,6 +211,8 @@ type Props = {
   initialStatus?: string
   className?: string
   videoClassName?: string
+  /** auto: 모바일·터치 기기는 사진 촬영 우선, PC는 실시간 */
+  defaultScanMode?: 'auto' | 'live' | 'photo'
 }
 
 export function BarcodeCamera({
@@ -221,6 +220,7 @@ export function BarcodeCamera({
   initialStatus = '실시간 탭에서 카메라를 비추면 바로 읽습니다.',
   className = '',
   videoClassName = 'w-full max-h-[min(42vh,320px)] min-h-[200px] object-contain bg-black',
+  defaultScanMode = 'auto',
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
@@ -229,11 +229,22 @@ export function BarcodeCamera({
   const lastText = useRef('')
   const onDecodeRef = useRef(onDecode)
   const readerRef = useRef<BrowserMultiFormatReader | null>(null)
-  const [scanMode, setScanMode] = useState<ScanMode>('live')
-  const [status, setStatus] = useState(initialStatus)
+  const [scanMode, setScanMode] = useState<ScanMode>(() =>
+    defaultScanMode === 'photo' ? 'photo' : 'live',
+  )
+  const [status, setStatus] = useState(() =>
+    defaultScanMode === 'photo' ? STATUS_PHOTO_RECOMMENDED : initialStatus,
+  )
   const [busy, setBusy] = useState(false)
 
   onDecodeRef.current = onDecode
+
+  useEffect(() => {
+    if (defaultScanMode !== 'auto') return
+    if (!prefersNativeCameraCapture()) return
+    setScanMode('photo')
+    setStatus(STATUS_PHOTO_RECOMMENDED)
+  }, [defaultScanMode])
 
   const getReader = useCallback(() => {
     if (!readerRef.current) {
@@ -259,45 +270,9 @@ export function BarcodeCamera({
   useEffect(() => {
     if (scanMode !== 'live') return
 
-    const reader = new BrowserMultiFormatReader(buildScannerHints(), {
-      delayBetweenScanAttempts: 50,
-      delayBetweenScanSuccess: 280,
-      tryPlayVideoTimeout: 12_000,
-    })
     let cancelled = false
-    let stream: MediaStream | null = null
-    let scanControls: { stop: () => void } | null = null
-    let nativeTimer: number | undefined
-    /** cleanup 시 videoRef와 동일 노드를 쓰기 위해 스캔 시작 시점 요소를 보관 */
-    let videoCleanup: HTMLVideoElement | null = null
-    const nativeDetector = createNativeDetector()
-
-    const pickBackDeviceId = async () => {
-      let envDeviceId: string | undefined
-      try {
-        const s = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' } },
-          audio: false,
-        })
-        const track = s.getVideoTracks()[0]
-        envDeviceId = track?.getSettings().deviceId
-        s.getTracks().forEach(t => t.stop())
-      } catch {
-        /* */
-      }
-      if (envDeviceId) return envDeviceId
-      const devices = await BrowserMultiFormatReader.listVideoInputDevices()
-      const scored = devices
-        .map(d => {
-          const label = d.label.toLowerCase()
-          let score = 0
-          if (/back|rear|environment|후면|뒤/i.test(label)) score += 100
-          if (/front|user|facetime|전면|앞/i.test(label)) score -= 100
-          return { id: d.deviceId, score }
-        })
-        .sort((a, b) => b.score - a.score)
-      return scored[0]?.id
-    }
+    let qrScanner: QrScanner | null = null
+    let zxingControls: { stop: () => void } | null = null
 
     const startDecode = async () => {
       const videoEl = videoRef.current
@@ -307,84 +282,47 @@ export function BarcodeCamera({
         }
         return
       }
-      videoCleanup = videoEl
 
-      const constraintAttempts: MediaStreamConstraints[] = [
-        {
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1920, min: 720 },
-            height: { ideal: 1080, min: 540 },
-            frameRate: { ideal: 30, max: 30 },
+      ensureQrWorkerPath()
+
+      try {
+        qrScanner = new QrScanner(
+          videoEl,
+          result => {
+            if (cancelled) return
+            void emitDecoded(result.data)
           },
-          audio: false,
-        },
-        {
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280, min: 640 },
-            height: { ideal: 720, min: 480 },
+          {
+            returnDetailedScanResult: true,
+            preferredCamera: 'environment',
+            maxScansPerSecond: 15,
+            highlightScanRegion: true,
+            highlightCodeOutline: true,
           },
-          audio: false,
-        },
-        {
-          video: { facingMode: 'environment', width: { min: 640 }, height: { min: 480 } },
-          audio: false,
-        },
-        { video: { facingMode: 'environment' }, audio: false },
-        { video: { facingMode: 'user' }, audio: false },
-        { video: true, audio: false },
-      ]
-
-      for (const constraints of constraintAttempts) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(constraints)
-          break
-        } catch {
-          stream = null
-        }
-      }
-
-      if (!stream) {
-        try {
-          const back = await pickBackDeviceId()
-          if (!back) throw new Error('no device')
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: back }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-            audio: false,
-          })
-        } catch {
-          setStatus('웹 카메라를 쓸 수 없습니다. 「사진으로 읽기」에서 기본 카메라를 이용하세요.')
-          return
-        }
+        )
+        await qrScanner.start()
+      } catch {
+        setStatus('카메라를 시작하지 못했습니다. 권한을 허용했는지 확인하거나「사진·카메라앱」탭을 이용하세요.')
+        return
       }
 
       try {
-        scanControls = await reader.decodeFromStream(stream, videoEl, result => {
+        const reader1d = new BrowserMultiFormatReader(build1DBarcodeHints(), {
+          delayBetweenScanAttempts: 80,
+          delayBetweenScanSuccess: 400,
+          tryPlayVideoTimeout: 12_000,
+        })
+        zxingControls = await reader1d.decodeFromVideoElement(videoEl, result => {
           if (cancelled || !result) return
           const text = normalizeBarcodePayload(result.getText())
           if (!text) return
           void emitDecoded(text)
         })
       } catch {
-        setStatus('실시간 스캔을 시작하지 못했습니다. 「사진으로 읽기」로 촬영해 보세요.')
-        stream.getTracks().forEach(t => t.stop())
-        stream = null
-        BrowserCodeReader.cleanVideoSource(videoEl)
-        return
+        /* 1D 실패해도 QR은 QrScanner로 동작 */
       }
 
-      if (nativeDetector) {
-        nativeTimer = window.setInterval(() => {
-          if (cancelled || !videoEl.srcObject) return
-          void detectWithNativeDetector(nativeDetector, videoEl).then(t => {
-            if (cancelled || !t) return
-            void emitDecoded(t)
-          })
-        }, NATIVE_DETECT_INTERVAL_MS)
-      }
-
-      setStatus('코드를 화면 중앙에 맞추면 바로 인식합니다 · 밝게·가깝게')
+      setStatus('QR은 녹색 박스 안에 맞추면 인식합니다 · 밝게·가깝게 (1D 바코드도 지원)')
     }
 
     setStatus('카메라 시작 중…')
@@ -395,18 +333,10 @@ export function BarcodeCamera({
     return () => {
       cancelled = true
       window.cancelAnimationFrame(raf)
-      if (nativeTimer !== undefined) window.clearInterval(nativeTimer)
-      if (scanControls) {
-        scanControls.stop()
-      } else if (stream) {
-        stream.getTracks().forEach(t => t.stop())
-      }
-      scanControls = null
-      stream = null
-      if (videoCleanup) {
-        BrowserCodeReader.cleanVideoSource(videoCleanup)
-        videoCleanup = null
-      }
+      zxingControls?.stop()
+      zxingControls = null
+      qrScanner?.destroy()
+      qrScanner = null
     }
   }, [scanMode, emitDecoded])
 
@@ -482,7 +412,7 @@ export function BarcodeCamera({
         onChange={e => void handleFile(e.target.files?.[0], 'gallery')}
       />
 
-      <div className="flex border-b border-slate-800 bg-slate-950">
+      <div className="flex max-sm:flex-row-reverse border-b border-slate-800 bg-slate-950">
         <button
           type="button"
           onClick={() => {
@@ -496,7 +426,7 @@ export function BarcodeCamera({
           }`}
         >
           <ScanLine className="w-4 h-4" />
-          실시간 스캔
+          실시간
         </button>
         <button
           type="button"
@@ -511,7 +441,7 @@ export function BarcodeCamera({
           }`}
         >
           <Camera className="w-4 h-4" />
-          사진으로 읽기
+          사진·카메라앱
         </button>
       </div>
 
@@ -535,9 +465,12 @@ export function BarcodeCamera({
         </div>
       ) : (
         <div className="w-full max-h-[min(42vh,320px)] min-h-[200px] flex flex-col items-center justify-center bg-slate-950 text-slate-300 px-4 py-6">
-          <p className="text-sm text-center mb-4 max-w-sm leading-relaxed">
-            <strong className="text-slate-100">기본 카메라</strong>로 찍거나 <strong className="text-slate-100">앨범</strong>
-            에서 선택하세요. 1D 바코드는 막대가 잘리지 않게 가로로 담아 주세요.
+          <p className="text-sm text-center mb-2 max-w-sm leading-relaxed text-slate-200">
+            브라우저 안 <strong className="text-slate-50">실시간 미리보기</strong>보다, 휴대폰{' '}
+            <strong className="text-slate-50">기본 카메라 앱</strong>으로 찍은 사진이 훨씬 잘 읽힙니다.
+          </p>
+          <p className="text-xs text-center mb-4 max-w-sm leading-relaxed text-slate-500">
+            아래 버튼은 시스템 카메라를 열어 한 장 촬영한 뒤 이 앱으로 돌아옵니다. (카메라 앱이 QR만 보여 주는 화면과는 별개입니다.)
           </p>
           <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm">
             <button
@@ -547,7 +480,7 @@ export function BarcodeCamera({
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium py-3 px-4 transition-colors"
             >
               {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5 shrink-0" />}
-              카메라로 촬영
+              휴대폰 카메라로 촬영
             </button>
             <button
               type="button"
