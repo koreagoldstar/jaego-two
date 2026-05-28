@@ -5,7 +5,11 @@ import JsBarcode from 'jsbarcode'
 import QRCode from 'qrcode'
 import { createClient } from '@/lib/supabase/client'
 import type { Item } from '@/lib/supabase/types'
-import { buildItemLabelVariants } from '@/lib/items/labelVariants'
+import {
+  buildItemLabelVariants,
+  buildItemLabelVariantsFromLots,
+  type StockLotForLabel,
+} from '@/lib/items/labelVariants'
 import {
   is1DBarcodePayloadLossy,
   normalizeBarcodePayload,
@@ -197,8 +201,12 @@ function buildPrintIframeStyles(
   `
 }
 
-function getItemLabelRows(item: Item) {
-  return buildItemLabelVariants(item, '|').filter(row => row.payload)
+function getItemLabelRows(item: Item, lotsByItem: Record<string, StockLotForLabel[]>) {
+  const lots = lotsByItem[item.id]
+  if (lots?.length) {
+    return buildItemLabelVariantsFromLots(item, lots).filter(row => row.payload)
+  }
+  return buildItemLabelVariants(item).filter(row => row.payload)
 }
 
 function sanitizeFilePart(s: string): string {
@@ -349,6 +357,7 @@ export function BarcodePanel() {
   const [paperKey, setPaperKey] = useState<string>('58x40')
 
   const [items, setItems] = useState<Item[]>([])
+  const [lotsByItem, setLotsByItem] = useState<Record<string, StockLotForLabel[]>>({})
   const [itemsLoading, setItemsLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState('')
@@ -366,9 +375,27 @@ export function BarcodePanel() {
         setItemsLoading(false)
         return
       }
-      const { data } = await supabase.from('items').select('*').eq('user_id', user.id).order('name')
+      const [{ data }, { data: lotRows }] = await Promise.all([
+        supabase.from('items').select('*').eq('user_id', user.id).order('name'),
+        supabase
+          .from('item_stock_lots')
+          .select('item_id, lot_code, quantity, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: true }),
+      ])
       if (!cancelled) {
         setItems((data ?? []) as Item[])
+        const grouped: Record<string, StockLotForLabel[]> = {}
+        for (const row of lotRows ?? []) {
+          const itemId = String(row.item_id ?? '')
+          if (!itemId) continue
+          if (!grouped[itemId]) grouped[itemId] = []
+          grouped[itemId].push({
+            lot_code: row.lot_code ?? null,
+            quantity: row.quantity ?? 0,
+          })
+        }
+        setLotsByItem(grouped)
         setItemsLoading(false)
       }
     })()
@@ -382,11 +409,11 @@ export function BarcodePanel() {
       const next = new Set<string>()
       prev.forEach(id => {
         const item = items.find(i => i.id === id)
-        if (item && getItemLabelRows(item).length > 0) next.add(id)
+        if (item && getItemLabelRows(item, lotsByItem).length > 0) next.add(id)
       })
       return next
     })
-  }, [items])
+  }, [items, lotsByItem])
 
   const filteredItems = useMemo(() => {
     const q = filter.trim().toLowerCase()
@@ -403,14 +430,14 @@ export function BarcodePanel() {
   const itemRows = useMemo(
     () =>
       selectedList.flatMap(item =>
-        getItemLabelRows(item).map(row => ({
+        getItemLabelRows(item, lotsByItem).map(row => ({
           item,
           unitIndex: row.index,
           payload: row.payload!,
           barcode: row.barcode,
         }))
       ),
-    [selectedList]
+    [selectedList, lotsByItem]
   )
 
   const validItemRows = itemRows
@@ -428,11 +455,11 @@ export function BarcodePanel() {
     setSelected(prev => {
       const next = new Set(prev)
       filteredItems.forEach(i => {
-        if (getItemLabelRows(i).length > 0) next.add(i.id)
+        if (getItemLabelRows(i, lotsByItem).length > 0) next.add(i.id)
       })
       return next
     })
-  }, [filteredItems])
+  }, [filteredItems, lotsByItem])
 
   const clearSelection = useCallback(() => setSelected(new Set()), [])
 
@@ -833,7 +860,7 @@ export function BarcodePanel() {
               </div>
               <div className="max-h-[min(52vh,360px)] overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
                 {filteredItems.map(item => {
-                  const pCount = getItemLabelRows(item).length
+                  const pCount = getItemLabelRows(item, lotsByItem).length
                   const checked = selected.has(item.id)
                   return (
                     <label

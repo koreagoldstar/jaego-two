@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Item, ItemStockLot } from '@/lib/supabase/types'
-import { buildItemLabelVariants } from '@/lib/items/labelVariants'
+import { buildItemLabelVariantsFromLots } from '@/lib/items/labelVariants'
 import { ItemLabelStockListClient } from '@/components/items/ItemLabelStockListClient'
 import { ItemStockLegacyClient } from '@/components/items/ItemStockLegacyClient'
 import { ItemStockLotsClient } from '@/components/items/ItemStockLotsClient'
@@ -28,19 +28,22 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
 
   if (!row) notFound()
   const item = row as Item
-  const labelRows = buildItemLabelVariants(item, '|')
 
   const { data: lotRows, error: lotsErr } = await supabase
     .from('item_stock_lots')
     .select('id, user_id, item_id, quantity, lot_code, note, created_at')
     .eq('item_id', params.id)
     .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: true })
 
   const lotsTableMissing = Boolean(lotsErr && isMissingItemStockLotsTable(lotsErr))
   const lotsLoadError = lotsErr && !lotsTableMissing ? lotsErr.message : null
   const lots = (lotsTableMissing ? [] : (lotRows ?? [])) as ItemStockLot[]
   const lotCodes = lots.map(l => (l.lot_code ?? '').trim()).filter(Boolean)
+  const labelRows = buildItemLabelVariantsFromLots(
+    item,
+    lots.map(l => ({ lot_code: l.lot_code, quantity: l.quantity })),
+  )
 
   return (
     <div className="space-y-4 max-w-lg">

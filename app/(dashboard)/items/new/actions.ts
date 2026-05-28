@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { generateBarcodeValue } from '@/lib/items/codeGeneratorsServer'
-import { buildUnitLotCodes } from '@/lib/items/lotCodes'
+import { allocateNextUnitLotCodes } from '@/lib/items/lotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { redirect } from 'next/navigation'
 
@@ -72,7 +72,7 @@ export async function createItemAction(formData: FormData) {
   }
 
   if (quantity > 0 && inserted?.id) {
-    const lotCodes = buildUnitLotCodes(resolvedBarcode, quantity)
+    const lotCodes = allocateNextUnitLotCodes(resolvedBarcode, [], quantity)
     const lotRows = lotCodes.map(code => ({
       user_id: user.id,
       item_id: inserted.id,
@@ -174,7 +174,7 @@ export async function createItemsBatchAction(formData: FormData) {
   if (quantityEach > 0 && createdRows?.length) {
     const lotRows = createdRows.flatMap(row => {
       const baseCode = (row.barcode_code ?? '').trim() || `lot-${row.id.slice(0, 8)}`
-      return buildUnitLotCodes(baseCode, quantityEach).map(code => ({
+      return allocateNextUnitLotCodes(baseCode, [], quantityEach).map(code => ({
         user_id: user.id,
         item_id: row.id,
         quantity: 1,

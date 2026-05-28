@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { buildUnitLotCodes } from '@/lib/items/lotCodes'
+import { allocateNextUnitLotCodes, stripUnitSuffix } from '@/lib/items/lotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
 
@@ -43,16 +43,39 @@ export async function addItemStockLotAction(itemId: string, formData: FormData) 
   const createdRaw = String(formData.get('created_at') ?? '').trim()
   const created_at = parseDatetimeLocalToIso(createdRaw) ?? new Date().toISOString()
 
-  const insertRows = qty === 1
-    ? [{ user_id: user.id, item_id: itemId, quantity: 1, lot_code, note, created_at }]
-    : buildUnitLotCodes(lot_code, qty).map(code => ({
-        user_id: user.id,
-        item_id: itemId,
-        quantity: 1,
-        lot_code: code,
-        note,
-        created_at,
-      }))
+  const { data: existingLots, error: existingError } = await supabase
+    .from('item_stock_lots')
+    .select('lot_code')
+    .eq('item_id', itemId)
+    .eq('user_id', user.id)
+
+  if (existingError && !isMissingItemStockLotsTable(existingError)) {
+    return { ok: false as const, error: existingError.message }
+  }
+
+  const existingCodes = (existingLots ?? [])
+    .map(row => (row.lot_code ?? '').trim())
+    .filter(Boolean)
+
+  if (qty === 1) {
+    const code = lot_code.trim()
+    if (existingCodes.some(c => c.toLowerCase() === code.toLowerCase())) {
+      return { ok: false as const, error: '이 품목에 동일한 QR 입고가 이미 있습니다. 다른 코드를 쓰세요.' }
+    }
+  }
+
+  const base = stripUnitSuffix(lot_code) || lot_code
+  const unitCodes =
+    qty === 1 ? [lot_code.trim()] : allocateNextUnitLotCodes(base, existingCodes, qty)
+
+  const insertRows = unitCodes.map(code => ({
+    user_id: user.id,
+    item_id: itemId,
+    quantity: 1,
+    lot_code: code,
+    note,
+    created_at,
+  }))
 
   const { error } = await supabase.from('item_stock_lots').insert(insertRows)
 
@@ -94,7 +117,23 @@ export async function updateItemStockLotAction(
   const created_at = parseDatetimeLocalToIso(createdRaw)
   if (!created_at) return { ok: false as const, error: '날짜·시간을 확인하세요' }
 
-  const unitCodes = qty === 1 ? [lot_code] : buildUnitLotCodes(lot_code, qty)
+  const { data: peerLots, error: peerError } = await supabase
+    .from('item_stock_lots')
+    .select('lot_code')
+    .eq('item_id', itemId)
+    .eq('user_id', user.id)
+
+  if (peerError && !isMissingItemStockLotsTable(peerError)) {
+    return { ok: false as const, error: peerError.message }
+  }
+
+  const peerCodes = (peerLots ?? [])
+    .map(row => (row.lot_code ?? '').trim())
+    .filter(Boolean)
+
+  const base = stripUnitSuffix(lot_code) || lot_code
+  const unitCodes =
+    qty === 1 ? [lot_code.trim()] : allocateNextUnitLotCodes(base, peerCodes, qty)
 
   const { error } = await supabase
     .from('item_stock_lots')

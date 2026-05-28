@@ -1,6 +1,8 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { allocateNextUnitLotCodes } from '@/lib/items/lotCodes'
+import { deleteUnitLotsFifo } from '@/lib/items/stockLotFifo'
 import { revalidatePath } from 'next/cache'
 
 function parseDatetimeLocalToIso(s: string): string | null {
@@ -90,6 +92,103 @@ export async function updateInventoryEventAction(id: string, formData: FormData)
     .update({ item_name, detail, quantity, created_at })
     .eq('id', id)
     .eq('user_id', user.id)
+
+  if (error) return { ok: false as const, error: error.message }
+  revalidatePath('/transactions')
+  return { ok: true as const }
+}
+
+export async function deleteStockTransactionAction(id: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
+
+  const { data: tx, error: txError } = await supabase
+    .from('stock_transactions')
+    .select('id, item_id, direction, amount')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (txError) return { ok: false as const, error: txError.message }
+  if (!tx) return { ok: false as const, error: '이력을 찾을 수 없습니다' }
+
+  if (tx.direction === 'out') {
+    const { data: item, error: itemError } = await supabase
+      .from('items')
+      .select('barcode_code')
+      .eq('id', tx.item_id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (itemError) return { ok: false as const, error: itemError.message }
+    if (!item) return { ok: false as const, error: '품목을 찾을 수 없습니다' }
+
+    const { data: lotRows, error: lotError } = await supabase
+      .from('item_stock_lots')
+      .select('lot_code')
+      .eq('item_id', tx.item_id)
+      .eq('user_id', user.id)
+
+    if (lotError) {
+      const { error: reverseError } = await supabase.rpc('apply_stock_move', {
+        p_item_id: tx.item_id,
+        p_direction: 'in',
+        p_amount: tx.amount,
+        p_note: '[이력삭제보정]',
+        p_project: null,
+      })
+      if (reverseError) {
+        return { ok: false as const, error: `재고 되돌리기 실패: ${reverseError.message}` }
+      }
+    } else {
+      const base =
+        (item.barcode_code ?? '').trim() || `item-${String(tx.item_id).slice(0, 8)}`
+      const existingCodes = (lotRows ?? [])
+        .map(row => (row.lot_code ?? '').trim())
+        .filter(Boolean)
+      const codes = allocateNextUnitLotCodes(base, existingCodes, tx.amount)
+      const { error: insError } = await supabase.from('item_stock_lots').insert(
+        codes.map(code => ({
+          user_id: user.id,
+          item_id: tx.item_id,
+          quantity: 1,
+          lot_code: code,
+          note: '[이력삭제복구]',
+        })),
+      )
+      if (insError) {
+        return { ok: false as const, error: `재고 되돌리기 실패: ${insError.message}` }
+      }
+    }
+  } else {
+    const fifo = await deleteUnitLotsFifo(supabase, user.id, tx.item_id, tx.amount)
+    if (!fifo.ok) return fifo
+  }
+
+  const { error: delError } = await supabase
+    .from('stock_transactions')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id)
+
+  if (delError) return { ok: false as const, error: delError.message }
+
+  revalidatePath('/transactions')
+  revalidatePath('/items')
+  revalidatePath('/stock-overview')
+  return { ok: true as const }
+}
+
+export async function deleteInventoryEventAction(id: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
+
+  const { error } = await supabase.from('inventory_events').delete().eq('id', id).eq('user_id', user.id)
 
   if (error) return { ok: false as const, error: error.message }
   revalidatePath('/transactions')

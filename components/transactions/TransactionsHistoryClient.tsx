@@ -1,10 +1,12 @@
 'use client'
 
 import {
+  deleteInventoryEventAction,
+  deleteStockTransactionAction,
   updateInventoryEventAction,
   updateStockTransactionAction,
 } from '@/app/(dashboard)/transactions/actions'
-import { Loader2, Pencil } from 'lucide-react'
+import { Loader2, Pencil, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 
@@ -71,6 +73,26 @@ export function TransactionsHistoryClient({ rows }: { rows: HistoryRow[] }) {
       router.refresh()
     },
     [router]
+  )
+
+  const onDelete = useCallback(
+    async (tx: HistoryRow) => {
+      const label = tx.kind === 'stock' ? tx.title : tx.item_name
+      if (!window.confirm(`이 이력을 삭제할까요?\n${label}\n(재고는 되돌리거나 차감됩니다)`)) return
+      setBusy(tx.key)
+      const res =
+        tx.kind === 'stock'
+          ? await deleteStockTransactionAction(tx.rawId)
+          : await deleteInventoryEventAction(tx.rawId)
+      setBusy(null)
+      if (!res.ok) {
+        alert(res.error)
+        return
+      }
+      if (editingKey === tx.key) setEditingKey(null)
+      router.refresh()
+    },
+    [router, editingKey],
   )
 
   const onSaveInv = useCallback(
@@ -251,14 +273,29 @@ export function TransactionsHistoryClient({ rows }: { rows: HistoryRow[] }) {
                 <span className={`inline-block font-semibold tabular-nums ${tx.amountClass}`}>
                   {tx.amountText}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setEditingKey(tx.key)}
-                  className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  수정
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditingKey(tx.key)}
+                    className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    수정
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy === tx.key}
+                    onClick={() => void onDelete(tx)}
+                    className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline disabled:opacity-50"
+                  >
+                    {busy === tx.key ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                    삭제
+                  </button>
+                </div>
               </div>
             </>
           )}

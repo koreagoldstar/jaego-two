@@ -2,7 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { generateBarcodeValue } from '@/lib/items/codeGeneratorsServer'
-import { buildUnitLotCodes } from '@/lib/items/lotCodes'
+import { allocateNextUnitLotCodes } from '@/lib/items/lotCodes'
+import { deleteUnitLotsFifo } from '@/lib/items/stockLotFifo'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { redirect } from 'next/navigation'
 
@@ -88,20 +89,36 @@ export async function updateItemAction(itemId: string, formData: FormData) {
   }
 
   if (quantity !== effectiveSum) {
-    await supabase.from('item_stock_lots').delete().eq('item_id', itemId).eq('user_id', user.id)
+    const { data: codeRows } = await supabase
+      .from('item_stock_lots')
+      .select('lot_code')
+      .eq('item_id', itemId)
+      .eq('user_id', user.id)
 
-    if (quantity > 0) {
-      const lotRows = buildUnitLotCodes(resolvedBarcode, quantity).map(code => ({
+    const existingCodes = (codeRows ?? [])
+      .map(row => (row.lot_code ?? '').trim())
+      .filter(Boolean)
+
+    if (quantity > effectiveSum) {
+      const addCount = quantity - effectiveSum
+      const newCodes = allocateNextUnitLotCodes(resolvedBarcode, existingCodes, addCount)
+      const lotRows = newCodes.map(code => ({
         user_id: user.id,
         item_id: itemId,
         quantity: 1,
         lot_code: code,
         note: '',
-        created_at: meta.created_at,
+        created_at: new Date().toISOString(),
       }))
       const { error: lotErr } = await supabase.from('item_stock_lots').insert(lotRows)
       if (lotErr) {
         redirect(`/items/${itemId}/edit?error=` + encodeURIComponent(lotErr.message))
+      }
+    } else {
+      const removeCount = effectiveSum - quantity
+      const fifo = await deleteUnitLotsFifo(supabase, user.id, itemId, removeCount)
+      if (!fifo.ok) {
+        redirect(`/items/${itemId}/edit?error=` + encodeURIComponent(fifo.error))
       }
     }
   }
