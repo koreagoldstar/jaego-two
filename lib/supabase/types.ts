@@ -21,6 +21,8 @@ export type StockTransaction = {
   note: string | null
   /** 입·출고 연결 프로젝트/현장명 */
   project: string | null
+  /** 출고·입고된 단위 QR (복수면 쉼표 구분, 예: code-001,code-002) */
+  lot_code: string | null
   created_at: string
 }
 

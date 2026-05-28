@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { buildTransactionQrDetailLines } from '@/lib/items/transactionQrDisplay'
 import type { StockTransaction } from '@/lib/supabase/types'
 import { TransactionsHistoryClient, type HistoryRow } from '@/components/transactions/TransactionsHistoryClient'
 
@@ -16,12 +17,6 @@ type InventoryEventRow = {
   created_at: string
 }
 
-function formatPrintValue(baseBarcode: string, amount: number) {
-  const safeAmount = Math.max(1, amount)
-  if (safeAmount === 1) return baseBarcode
-  return `${baseBarcode}-001 ~ ${baseBarcode}-${String(safeAmount).padStart(3, '0')}`
-}
-
 export default async function TransactionsPage() {
   const supabase = await createClient()
   const {
@@ -31,7 +26,7 @@ export default async function TransactionsPage() {
 
   const { data: rows } = await supabase
     .from('stock_transactions')
-    .select('id, direction, amount, note, project, created_at, items(name, barcode_code)')
+    .select('id, direction, amount, note, project, lot_code, created_at, items(name, barcode_code)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -56,12 +51,8 @@ export default async function TransactionsPage() {
       subtitle: [tx.project, tx.note].filter(Boolean).join(' · '),
       detailLines: [
         `구분: ${tx.direction === 'in' ? '입고' : '출고'}`,
-        tx.direction === 'out' && tx.items?.barcode_code ? `QR 코드: ${tx.items.barcode_code}` : '',
-        tx.direction === 'out' && tx.items?.barcode_code ? `QR 옆 숫자: ${tx.amount}` : '',
-        tx.direction === 'out' && tx.items?.barcode_code
-          ? `인쇄값: ${formatPrintValue(tx.items.barcode_code, tx.amount)}`
-          : '',
-      ].filter(Boolean),
+        ...buildTransactionQrDetailLines(tx.lot_code, tx.items?.barcode_code ?? null, tx.amount),
+      ],
       amountText: `${tx.direction === 'in' ? '+' : '−'}${tx.amount}`,
       amountClass: tx.direction === 'in' ? 'text-emerald-600' : 'text-orange-600',
       direction: tx.direction,

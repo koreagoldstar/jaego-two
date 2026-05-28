@@ -1,3 +1,4 @@
+import { formatTransactionQrDisplay } from '@/lib/items/transactionQrDisplay'
 import { createClient } from '@/lib/supabase/server'
 import type { StockTransaction } from '@/lib/supabase/types'
 import { NextResponse } from 'next/server'
@@ -39,7 +40,7 @@ export async function GET() {
 
   const { data: rows } = await supabase
     .from('stock_transactions')
-    .select('id, direction, amount, note, project, created_at, items(name, barcode_code)')
+    .select('id, direction, amount, note, project, lot_code, created_at, items(name, barcode_code)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(LIMIT)
@@ -63,7 +64,7 @@ export async function GET() {
       qtySigned: tx.direction === 'in' ? tx.amount : -tx.amount,
       project: tx.project ?? '',
       note: tx.note ?? '',
-      qr: tx.items?.barcode_code ?? '',
+      qr: formatTransactionQrDisplay(tx.lot_code, tx.items?.barcode_code ?? null, tx.amount),
     })),
     ...inventoryEvents.map(ev => ({
       created_at: ev.created_at,
