@@ -15,6 +15,7 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
+  const userId = user.id
 
   const raw = String(formData.get('label_index') ?? '').trim()
   const labelIndex = parseInt(raw, 10)
@@ -26,7 +27,7 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
     .from('item_stock_lots')
     .select('id, quantity, lot_code, created_at')
     .eq('item_id', itemId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: true })
 
   if (lotProbe.error && isMissingItemStockLotsTable(lotProbe.error)) {
@@ -34,7 +35,7 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
       .from('items')
       .select('quantity')
       .eq('id', itemId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .maybeSingle()
 
     if (selErr) return { ok: false as const, error: selErr.message }
@@ -50,7 +51,7 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
       .from('items')
       .update({ quantity: q - 1, updated_at: new Date().toISOString() })
       .eq('id', itemId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
 
     if (error) return { ok: false as const, error: error.message }
     revalidatePath(`/items/${itemId}`)
@@ -75,7 +76,7 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
         .from('item_stock_lots')
         .delete()
         .eq('id', row.id)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('item_id', itemId)
       if (error) {
         const msg = isMissingItemStockLotsTable(error) ? '입고 단위 테이블을 확인하세요.' : error.message
@@ -86,7 +87,7 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
         .from('item_stock_lots')
         .update({ quantity: q - 1 })
         .eq('id', row.id)
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('item_id', itemId)
       if (error) {
         const msg = isMissingItemStockLotsTable(error) ? '입고 단위 테이블을 확인하세요.' : error.message
