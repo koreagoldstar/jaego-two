@@ -26,7 +26,9 @@ export function BulkOutClient() {
   const [pendingScan, setPendingScan] = useState<{ code: string; itemId: string; itemName: string } | null>(null)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [bucket, setBucket] = useState<Record<string, ScanBucket>>({})
+  const [bulkOutConfirmPending, setBulkOutConfirmPending] = useState(false)
   const resolveRef = useRef<(code: string) => Promise<void>>(async () => {})
+  const submittingRef = useRef(false)
 
   const load = useCallback(async () => {
     const supabase = createClient()
@@ -165,9 +167,24 @@ export function BulkOutClient() {
     setBucket({})
     setMsg(null)
     setScanLine(null)
+    setBulkOutConfirmPending(false)
   }, [])
 
+  const requestBulkOut = useCallback(() => {
+    setMsg(null)
+    if (!project.trim()) {
+      setMsg({ type: 'err', text: '프로젝트/현장을 입력하세요.' })
+      return
+    }
+    if (rows.length === 0) {
+      setMsg({ type: 'err', text: '먼저 바코드를 스캔하세요.' })
+      return
+    }
+    setBulkOutConfirmPending(true)
+  }, [project, rows.length])
+
   const runBulkOut = useCallback(async () => {
+    if (submittingRef.current) return
     setMsg(null)
     if (!project.trim()) {
       setMsg({ type: 'err', text: '프로젝트/현장을 입력하세요.' })
@@ -178,37 +195,45 @@ export function BulkOutClient() {
       return
     }
 
+    submittingRef.current = true
     setBusy(true)
     const supabase = createClient()
     let okCount = 0
     const failed: string[] = []
 
-    for (const row of rows) {
-      const { error } = await supabase.rpc('apply_stock_move', {
-        p_item_id: row.item.id,
-        p_direction: 'out',
-        p_amount: row.count,
-        p_note: note.trim() || null,
-        p_project: project.trim(),
-      })
-      if (error) {
-        failed.push(`${row.item.name} (${error.message})`)
-      } else {
-        okCount++
+    try {
+      for (const row of rows) {
+        const { error } = await supabase.rpc('apply_stock_move', {
+          p_item_id: row.item.id,
+          p_direction: 'out',
+          p_amount: row.count,
+          p_note: note.trim() || null,
+          p_project: project.trim(),
+        })
+        if (error) {
+          failed.push(`${row.item.name} (${error.message})`)
+        } else {
+          okCount++
+        }
       }
-    }
 
-    setBusy(false)
-    if (failed.length > 0) {
-      setMsg({
-        type: 'err',
-        text: `일부 실패: ${failed.slice(0, 3).join(' / ')}${failed.length > 3 ? ` 외 ${failed.length - 3}건` : ''}`,
-      })
-    } else {
-      setMsg({ type: 'ok', text: `출고 완료: ${okCount}개 품목, 총 ${totalScans}개` })
-      setBucket({})
-      setNote('')
-      await load()
+      if (failed.length > 0) {
+        setBulkOutConfirmPending(false)
+        setMsg({
+          type: 'err',
+          text: `일부 실패: ${failed.slice(0, 3).join(' / ')}${failed.length > 3 ? ` 외 ${failed.length - 3}건` : ''}`,
+        })
+      } else {
+        setMsg({ type: 'ok', text: `출고 완료: ${okCount}개 품목, 총 ${totalScans}개` })
+        setBucket({})
+        setNote('')
+        setBulkOutConfirmPending(false)
+        setScanLine(null)
+        await load()
+      }
+    } finally {
+      submittingRef.current = false
+      setBusy(false)
     }
   }, [project, rows, note, totalScans, load])
 
@@ -360,10 +385,45 @@ export function BulkOutClient() {
         </p>
       )}
 
+      {bulkOutConfirmPending && rows.length > 0 && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-3 space-y-2">
+          <p className="text-sm text-orange-900 font-medium">일괄 출고 확인</p>
+          <p className="text-xs text-orange-800 leading-relaxed">
+            프로젝트 <span className="font-semibold">{project.trim()}</span>로 총{' '}
+            <span className="font-semibold">{totalScans}개</span> ({rows.length}개 품목)를 출고할까요?
+          </p>
+          <ul className="text-[11px] text-orange-800/90 max-h-28 overflow-y-auto space-y-0.5">
+            {rows.map(row => (
+              <li key={row.item.id}>
+                {row.item.name} × {row.count}
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setBulkOutConfirmPending(false)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void runBulkOut()}
+              className="rounded-lg bg-orange-600 text-white px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            >
+              {busy ? '처리 중…' : '확인 출고'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <button
         type="button"
-        disabled={busy || rows.length === 0}
-        onClick={() => void runBulkOut()}
+        disabled={busy || rows.length === 0 || bulkOutConfirmPending}
+        onClick={requestBulkOut}
         className="w-full rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {busy ? '출고 처리 중…' : `일괄 출고 실행 (${totalScans}개)`}

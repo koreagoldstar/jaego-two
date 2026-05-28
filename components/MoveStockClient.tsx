@@ -27,9 +27,11 @@ export function MoveStockClient() {
   const [lastScanAt, setLastScanAt] = useState<string | null>(null)
   const [scanCount, setScanCount] = useState(0)
   const [pendingScan, setPendingScan] = useState<{ code: string; itemId: string; itemName: string } | null>(null)
+  const [outConfirmPending, setOutConfirmPending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
 
   const resolveRef = useRef<(code: string) => Promise<void>>(async () => {})
+  const submittingRef = useRef(false)
 
   const load = useCallback(async () => {
     const supabase = createClient()
@@ -199,7 +201,22 @@ export function MoveStockClient() {
     }
   }
 
+  function requestOut() {
+    setMsg(null)
+    setOutConfirmPending(false)
+    if (!selectedId || amount < 1) {
+      setMsg({ type: 'err', text: '스캔으로 품목을 먼저 선택하세요.' })
+      return
+    }
+    if (outBlockedByRemaining) {
+      setMsg({ type: 'err', text: '프로젝트 예정 잔여가 0 이하라 출고할 수 없습니다.' })
+      return
+    }
+    setOutConfirmPending(true)
+  }
+
   async function run(direction: 'in' | 'out') {
+    if (submittingRef.current) return
     setMsg(null)
     if (!selectedId || amount < 1) {
       setMsg({ type: 'err', text: '스캔으로 품목을 먼저 선택하세요.' })
@@ -210,25 +227,35 @@ export function MoveStockClient() {
       return
     }
     const requestAmount = direction === 'out' ? 1 : amount
+    submittingRef.current = true
     setBusy(true)
-    const supabase = createClient()
-    const { data, error } = await supabase.rpc('apply_stock_move', {
-      p_item_id: selectedId,
-      p_direction: direction,
-      p_amount: requestAmount,
-      p_note: note.trim() || null,
-      p_project: project.trim() || null,
-    })
-    setBusy(false)
-    if (error) {
-      setMsg({ type: 'err', text: error.message })
-      return
-    }
-    if (data) {
-      setMsg({ type: 'ok', text: direction === 'in' ? '입고 완료' : '출고 완료 (스캔 1개 기준)' })
-      setNote('')
-      setAmount(1)
-      await load()
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.rpc('apply_stock_move', {
+        p_item_id: selectedId,
+        p_direction: direction,
+        p_amount: requestAmount,
+        p_note: note.trim() || null,
+        p_project: project.trim() || null,
+      })
+      if (error) {
+        setMsg({ type: 'err', text: error.message })
+        return
+      }
+      if (data) {
+        setMsg({ type: 'ok', text: direction === 'in' ? '입고 완료' : '출고 완료 (스캔 1개 기준)' })
+        setNote('')
+        setAmount(1)
+        if (direction === 'out') {
+          setOutConfirmPending(false)
+          setSelectedId('')
+          setScanLine(null)
+        }
+        await load()
+      }
+    } finally {
+      submittingRef.current = false
+      setBusy(false)
     }
   }
 
@@ -307,6 +334,7 @@ export function MoveStockClient() {
                 setSelectedId('')
                 setScanLine(null)
                 setMsg(null)
+                setOutConfirmPending(false)
               }}
               className="shrink-0 p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300"
               aria-label="선택 해제"
@@ -447,19 +475,52 @@ export function MoveStockClient() {
         </p>
       )}
 
+      {outConfirmPending && selected && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-3 space-y-2">
+          <p className="text-sm text-orange-900 font-medium">출고 확인</p>
+          <p className="text-xs text-orange-800 leading-relaxed">
+            <span className="font-semibold">{selected.name}</span> 1개를 출고할까요?
+            {project.trim() ? (
+              <>
+                <br />
+                프로젝트: {project.trim()}
+              </>
+            ) : null}
+          </p>
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setOutConfirmPending(false)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs disabled:opacity-50"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run('out')}
+              className="rounded-lg bg-orange-600 text-white px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            >
+              {busy ? '처리 중…' : '확인 출고'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 pt-1">
         <button
           type="button"
-          disabled={busy || !selectedId}
-          onClick={() => run('in')}
+          disabled={busy || !selectedId || outConfirmPending}
+          onClick={() => void run('in')}
           className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-5 text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           입고
         </button>
         <button
           type="button"
-          disabled={busy || !selectedId || Boolean(outBlockedByRemaining)}
-          onClick={() => run('out')}
+          disabled={busy || !selectedId || Boolean(outBlockedByRemaining) || outConfirmPending}
+          onClick={requestOut}
           className="rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-semibold py-5 text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           출고
