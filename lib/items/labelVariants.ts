@@ -1,5 +1,10 @@
 import type { Item } from '@/lib/supabase/types'
-import { allocateNextUnitLotCodes, stripUnitSuffix } from '@/lib/items/lotCodes'
+import { allocateNextUnitLotCodes, parseUnitSuffixIndex, stripUnitSuffix } from '@/lib/items/lotCodes'
+
+/** QR lot_code 끝 순번(-003)과 라벨 #3 표시를 맞춥니다. */
+export function labelIndexFromLotCode(code: string): number {
+  return parseUnitSuffixIndex(code) ?? 1
+}
 
 export type ItemLabelVariant = {
   index: number
@@ -18,7 +23,6 @@ export function buildItemLabelVariantsFromLots(
   lots: StockLotForLabel[],
 ): ItemLabelVariant[] {
   const rows: ItemLabelVariant[] = []
-  let index = 0
   const allLotCodes = lots.map(l => (l.lot_code ?? '').trim()).filter(Boolean)
 
   for (const lot of lots) {
@@ -28,8 +32,7 @@ export function buildItemLabelVariantsFromLots(
 
     // 정상: lot 1행 = 실물 1개 = QR 1개 (quantity 1, lot_code 고유)
     if (qty === 1) {
-      index += 1
-      rows.push({ index, barcode: code, payload: code })
+      rows.push({ index: labelIndexFromLotCode(code), barcode: code, payload: code })
       continue
     }
 
@@ -37,10 +40,15 @@ export function buildItemLabelVariantsFromLots(
     const base = stripUnitSuffix(code) || code
     const payloads = allocateNextUnitLotCodes(base, allLotCodes, qty)
     for (const payload of payloads) {
-      index += 1
-      rows.push({ index, barcode: payload, payload })
+      rows.push({
+        index: labelIndexFromLotCode(payload),
+        barcode: payload,
+        payload,
+      })
     }
   }
+
+  rows.sort((a, b) => a.index - b.index || (a.barcode ?? '').localeCompare(b.barcode ?? ''))
 
   if (rows.length > 0) return rows
   return buildItemLabelVariants(item)
@@ -55,9 +63,11 @@ export function buildItemLabelVariants(item: Item): ItemLabelVariant[] {
   if (!baseBarcode) return []
 
   const codes = allocateNextUnitLotCodes(baseBarcode, [], qty)
-  return codes.map((payload, i) => ({
-    index: i + 1,
-    barcode: payload,
-    payload,
-  }))
+  return codes
+    .map(payload => ({
+      index: labelIndexFromLotCode(payload),
+      barcode: payload,
+      payload,
+    }))
+    .sort((a, b) => a.index - b.index)
 }

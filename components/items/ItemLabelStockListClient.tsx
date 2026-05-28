@@ -39,7 +39,8 @@ export function ItemLabelStockListClient({ itemId, labelRows, legacyStockMode }:
     <div className="space-y-2">
       {!legacyStockMode ? (
         <p className="text-[11px] text-slate-500">
-          삭제 시 <span className="font-medium text-slate-700">가장 오래된 입고부터</span> 한 개씩 줄입니다. 라벨 #1은 그 첫 번째 단위입니다.
+          라벨 <span className="font-medium text-slate-700">#번호</span>는 QR 코드값 끝 순번(-001 → #1)과 같습니다. 출고해도 다른
+          번호는 바뀌지 않습니다.
         </p>
       ) : (
         <p className="text-[11px] text-slate-500">입고 단위 DB 없이 보유 수량만 1개 줄입니다.</p>
@@ -47,7 +48,7 @@ export function ItemLabelStockListClient({ itemId, labelRows, legacyStockMode }:
       <ul className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
         {labelRows.map(row => (
           <li
-            key={`${itemId}-label-${row.index}`}
+            key={`${itemId}-label-${row.barcode ?? row.index}`}
             className="px-3 py-2 text-xs text-slate-700 flex gap-2 items-start justify-between"
           >
             <div className="min-w-0 space-y-1 flex-1">

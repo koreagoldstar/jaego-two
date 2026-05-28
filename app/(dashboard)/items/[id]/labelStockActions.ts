@@ -1,13 +1,13 @@
 'use server'
 
+import { parseUnitSuffixIndex } from '@/lib/items/lotCodes'
 import { createClient } from '@/lib/supabase/server'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
 
 /**
- * 재고 수량 기준 라벨 #index(1-based)에 해당하는 실물 1개를 삭제합니다.
- * 입고 단위(lots)가 있으면 created_at 오름차순(FIFO)으로 어느 입고 줄에서 뺄지 결정합니다.
- * 레거시(합산만)면 수량만 1 감소합니다.
+ * 라벨 #N = lot_code 끝 순번(-00N)에 해당하는 입고 단위 1개를 삭제합니다.
+ * 순번이 없는 구데이터만 FIFO(입고 순)로 처리합니다.
  */
 export async function deleteItemLabelUnitAction(itemId: string, formData: FormData) {
   const supabase = await createClient()
@@ -24,7 +24,7 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
 
   const lotProbe = await supabase
     .from('item_stock_lots')
-    .select('id, quantity, created_at')
+    .select('id, quantity, lot_code, created_at')
     .eq('item_id', itemId)
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
@@ -64,18 +64,12 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
 
   const lots = lotProbe.data ?? []
   const total = lots.reduce((s, r) => s + (r.quantity ?? 0), 0)
-  if (labelIndex > total) {
-    return { ok: false as const, error: '이미 반영되었습니다. 페이지를 새로고침 하세요.' }
-  }
   if (total < 1) return { ok: false as const, error: '삭제할 재고가 없습니다.' }
 
-  let remaining = labelIndex
-  for (const row of lots) {
+  const hasNumberedLots = lots.some(r => parseUnitSuffixIndex(r.lot_code ?? '') !== null)
+
+  async function removeLotRow(row: { id: string; quantity: number | null }) {
     const q = row.quantity ?? 0
-    if (remaining > q) {
-      remaining -= q
-      continue
-    }
     if (q <= 1) {
       const { error } = await supabase
         .from('item_stock_lots')
@@ -102,6 +96,28 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
     revalidatePath(`/items/${itemId}`)
     revalidatePath('/items')
     return { ok: true as const }
+  }
+
+  if (hasNumberedLots) {
+    const target = lots.find(r => parseUnitSuffixIndex(r.lot_code ?? '') === labelIndex)
+    if (!target) {
+      return { ok: false as const, error: `#${labelIndex}에 해당하는 재고가 없습니다.` }
+    }
+    return removeLotRow(target)
+  }
+
+  if (labelIndex > total) {
+    return { ok: false as const, error: '이미 반영되었습니다. 페이지를 새로고침 하세요.' }
+  }
+
+  let remaining = labelIndex
+  for (const row of lots) {
+    const q = row.quantity ?? 0
+    if (remaining > q) {
+      remaining -= q
+      continue
+    }
+    return removeLotRow(row)
   }
 
   return { ok: false as const, error: '삭제할 위치를 찾지 못했습니다.' }
