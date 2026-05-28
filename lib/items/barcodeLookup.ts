@@ -17,12 +17,17 @@ function parseUnitSuffix(code: string): { base: string; index: number } | null {
   return { base: m[1], index }
 }
 
-/** 사용자 품목 중 스캔 문자열로 id 조회 (인쇄 라벨 payload와 동일 규칙에 맞춤) */
-export async function findItemIdByBarcode(
+export type BarcodeLookupResult = {
+  itemId: string
+  lotId: string | null
+}
+
+/** 사용자 품목 중 스캔 문자열로 품목·입고 단위 조회 */
+export async function findItemByBarcode(
   supabase: SupabaseClient,
   userId: string,
   rawCode: string
-): Promise<string | null> {
+): Promise<BarcodeLookupResult | null> {
   const code = normalizeBarcodePayload(rawCode)
   if (!code) return null
 
@@ -43,12 +48,14 @@ export async function findItemIdByBarcode(
   for (const candidate of barcodeCandidates) {
     const { data: byLot, error: lotError } = await supabase
       .from('item_stock_lots')
-      .select('item_id')
+      .select('item_id, id')
       .eq('user_id', userId)
       .eq('lot_code', candidate)
       .limit(1)
       .maybeSingle()
-    if (!lotError && byLot?.item_id) return byLot.item_id
+    if (!lotError && byLot?.item_id) {
+      return { itemId: byLot.item_id, lotId: byLot.id ?? null }
+    }
   }
 
   for (const candidate of barcodeCandidates) {
@@ -62,12 +69,14 @@ export async function findItemIdByBarcode(
       .gte('quantity', parsed.index)
       .limit(1)
       .maybeSingle()
-    if (!baseLotError && byBaseLot?.item_id) return byBaseLot.item_id
+    if (!baseLotError && byBaseLot?.item_id) {
+      return { itemId: byBaseLot.item_id, lotId: null }
+    }
   }
 
   for (const candidate of barcodeCandidates) {
     const { data: byBarcode } = await base().eq('barcode_code', candidate).maybeSingle()
-    if (byBarcode?.id) return byBarcode.id
+    if (byBarcode?.id) return { itemId: byBarcode.id, lotId: null }
   }
 
   /* 부분 일치는 와일드카드 문자가 섞이면 쿼리가 깨질 수 있어 제한 */
@@ -80,8 +89,18 @@ export async function findItemIdByBarcode(
       .limit(1)
       .maybeSingle()
 
-    if (loose?.id) return loose.id
+    if (loose?.id) return { itemId: loose.id, lotId: null }
   }
 
   return null
+}
+
+/** @deprecated findItemByBarcode 사용 */
+export async function findItemIdByBarcode(
+  supabase: SupabaseClient,
+  userId: string,
+  rawCode: string
+): Promise<string | null> {
+  const hit = await findItemByBarcode(supabase, userId, rawCode)
+  return hit?.itemId ?? null
 }

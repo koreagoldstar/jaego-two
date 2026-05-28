@@ -3,18 +3,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { findItemIdByBarcode } from '@/lib/items/barcodeLookup'
-import type { Item } from '@/lib/supabase/types'
+import { findItemByBarcode } from '@/lib/items/barcodeLookup'
+import { buildStockUnitOptions, formatStockUnitLabel, type StockUnitOption } from '@/lib/items/stockUnits'
+import type { Item, ItemStockLot } from '@/lib/supabase/types'
+import { StockUnitPicker } from '@/components/stock/StockUnitPicker'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
 import { ChevronDown, Loader2, X } from 'lucide-react'
 
 export function MoveStockClient() {
   const searchParams = useSearchParams()
   const preItem = searchParams.get('item')
+  const preLot = searchParams.get('lot')
 
   const [items, setItems] = useState<Item[]>([])
+  const [lotsByItem, setLotsByItem] = useState<Record<string, StockUnitOption[]>>({})
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string>('')
+  const [selectedLotId, setSelectedLotId] = useState<string>('')
   const [amount, setAmount] = useState(1)
   const [project, setProject] = useState('')
   const [projectOptions, setProjectOptions] = useState<string[]>([])
@@ -26,7 +31,12 @@ export function MoveStockClient() {
   const [scanLine, setScanLine] = useState<string | null>(null)
   const [lastScanAt, setLastScanAt] = useState<string | null>(null)
   const [scanCount, setScanCount] = useState(0)
-  const [pendingScan, setPendingScan] = useState<{ code: string; itemId: string; itemName: string } | null>(null)
+  const [pendingScan, setPendingScan] = useState<{
+    code: string
+    itemId: string
+    itemName: string
+    lotId: string | null
+  } | null>(null)
   const [outConfirmPending, setOutConfirmPending] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
 
@@ -39,8 +49,36 @@ export function MoveStockClient() {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return
-    const { data } = await supabase.from('items').select('*').eq('user_id', user.id).order('name')
+    const [{ data }, lotRes] = await Promise.all([
+      supabase.from('items').select('*').eq('user_id', user.id).order('name'),
+      supabase
+        .from('item_stock_lots')
+        .select('id, item_id, lot_code, quantity, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true }),
+    ])
+    const lotRows = lotRes.error ? [] : (lotRes.data ?? [])
     setItems((data ?? []) as Item[])
+    const lotsGrouped: Record<string, ItemStockLot[]> = {}
+    for (const row of lotRows as ItemStockLot[]) {
+      const itemId = String(row.item_id ?? '')
+      if (!itemId) continue
+      if (!lotsGrouped[itemId]) lotsGrouped[itemId] = []
+      lotsGrouped[itemId].push({
+        id: row.id,
+        user_id: user.id,
+        item_id: itemId,
+        lot_code: row.lot_code,
+        quantity: row.quantity,
+        note: null,
+        created_at: row.created_at,
+      })
+    }
+    const unitOptions: Record<string, StockUnitOption[]> = {}
+    for (const [itemId, lots] of Object.entries(lotsGrouped)) {
+      unitOptions[itemId] = buildStockUnitOptions(lots)
+    }
+    setLotsByItem(unitOptions)
     const [projectRes, txRes] = await Promise.all([
       supabase.from('project_usage_plans').select('project_name, item_id, planned_qty').eq('user_id', user.id),
       supabase
@@ -104,8 +142,21 @@ export function MoveStockClient() {
     if (preItem && items.some(i => i.id === preItem)) {
       setSelectedId(preItem)
       setScanLine('URL로 품목이 지정되었습니다.')
+      const units = lotsByItem[preItem] ?? []
+      if (preLot && units.some(u => u.lotId === preLot)) {
+        setSelectedLotId(preLot)
+      }
     }
-  }, [preItem, items])
+  }, [preItem, preLot, items, lotsByItem])
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedLotId('')
+      return
+    }
+    const units = lotsByItem[selectedId] ?? []
+    setSelectedLotId(prev => (prev && units.some(u => u.lotId === prev) ? prev : ''))
+  }, [selectedId, lotsByItem])
 
   const resolveBarcode = useCallback(async (code: string) => {
     setMsg(null)
@@ -122,8 +173,9 @@ export function MoveStockClient() {
     } = await supabase.auth.getUser()
     if (!user) return
 
-    const id = await findItemIdByBarcode(supabase, user.id, trimmed)
-    if (id) {
+    const hit = await findItemByBarcode(supabase, user.id, trimmed)
+    if (hit) {
+      const { itemId: id, lotId } = hit
       const selectedProject = project.trim()
       if (selectedProject) {
         const allowed = projectItemMap[selectedProject] ?? []
@@ -138,7 +190,7 @@ export function MoveStockClient() {
         }
       }
       const item = items.find(i => i.id === id)
-      setPendingScan({ code: trimmed, itemId: id, itemName: item?.name ?? '품목' })
+      setPendingScan({ code: trimmed, itemId: id, itemName: item?.name ?? '품목', lotId })
       return
     }
     setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
@@ -188,10 +240,20 @@ export function MoveStockClient() {
     })
   }, [selectedProject, projectItemMap, projectRemainingMap, items])
   const pickerItems = selectedProject ? projectItems : items
+  const availableUnits = useMemo(
+    () => (selectedId ? lotsByItem[selectedId] ?? [] : []),
+    [selectedId, lotsByItem]
+  )
+  const selectedUnit = useMemo(
+    () => availableUnits.find(u => u.lotId === selectedLotId) ?? null,
+    [availableUnits, selectedLotId]
+  )
+  const outRequiresUnitPick = availableUnits.length > 0
 
   function confirmPendingScan() {
     if (!pendingScan) return
     setSelectedId(pendingScan.itemId)
+    if (pendingScan.lotId) setSelectedLotId(pendingScan.lotId)
     setScanLine(`스캔 확인: ${pendingScan.code}`)
     setLastScanAt(new Date().toISOString())
     setScanCount(prev => prev + 1)
@@ -212,6 +274,10 @@ export function MoveStockClient() {
       setMsg({ type: 'err', text: '프로젝트 예정 잔여가 0 이하라 출고할 수 없습니다.' })
       return
     }
+    if (outRequiresUnitPick && !selectedLotId) {
+      setMsg({ type: 'err', text: '출고할 재고 단위를 선택하세요.' })
+      return
+    }
     setOutConfirmPending(true)
   }
 
@@ -226,6 +292,10 @@ export function MoveStockClient() {
       setMsg({ type: 'err', text: '프로젝트 예정 잔여가 0 이하라 출고할 수 없습니다.' })
       return
     }
+    if (direction === 'out' && outRequiresUnitPick && !selectedLotId) {
+      setMsg({ type: 'err', text: '출고할 재고 단위를 선택하세요.' })
+      return
+    }
     const requestAmount = direction === 'out' ? 1 : amount
     submittingRef.current = true
     setBusy(true)
@@ -237,6 +307,7 @@ export function MoveStockClient() {
         p_amount: requestAmount,
         p_note: note.trim() || null,
         p_project: project.trim() || null,
+        ...(direction === 'out' && selectedLotId ? { p_lot_id: selectedLotId } : {}),
       })
       if (error) {
         setMsg({ type: 'err', text: error.message })
@@ -249,6 +320,7 @@ export function MoveStockClient() {
         if (direction === 'out') {
           setOutConfirmPending(false)
           setSelectedId('')
+          setSelectedLotId('')
           setScanLine(null)
         }
         await load()
@@ -332,6 +404,7 @@ export function MoveStockClient() {
               type="button"
               onClick={() => {
                 setSelectedId('')
+                setSelectedLotId('')
                 setScanLine(null)
                 setMsg(null)
                 setOutConfirmPending(false)
@@ -371,6 +444,7 @@ export function MoveStockClient() {
             value={selectedId}
             onChange={e => {
               setSelectedId(e.target.value)
+              setSelectedLotId('')
               setScanLine(e.target.value ? '목록에서 선택했습니다.' : null)
             }}
             className="w-full rounded-xl border border-slate-200 px-3 py-3 text-base"
@@ -388,6 +462,28 @@ export function MoveStockClient() {
               )
             })}
           </select>
+        </div>
+      )}
+
+      {selectedId && availableUnits.length > 0 && (
+        <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-2">
+          <label className="block text-sm font-medium text-slate-700">출고할 재고 단위</label>
+          {selectedUnit ? (
+            <p className="text-xs text-orange-800 bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+              선택: {formatStockUnitLabel(selectedUnit)}
+            </p>
+          ) : (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              출고 전에 아래에서 단위를 선택하세요.
+            </p>
+          )}
+          <StockUnitPicker
+            units={availableUnits}
+            selectedLotId={selectedLotId}
+            onSelect={setSelectedLotId}
+            disabled={busy || outConfirmPending}
+            name="move-main-unit"
+          />
         </div>
       )}
 
@@ -479,7 +575,8 @@ export function MoveStockClient() {
         <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-3 space-y-2">
           <p className="text-sm text-orange-900 font-medium">출고 확인</p>
           <p className="text-xs text-orange-800 leading-relaxed">
-            <span className="font-semibold">{selected.name}</span> 1개를 출고할까요?
+            <span className="font-semibold">{selected.name}</span>{' '}
+            {selectedUnit ? formatStockUnitLabel(selectedUnit) : '1개'}를 출고할까요?
             {project.trim() ? (
               <>
                 <br />

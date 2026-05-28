@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Item, ItemStockLot } from '@/lib/supabase/types'
 import { buildItemLabelVariantsFromLots } from '@/lib/items/labelVariants'
+import { buildStockUnitOptions } from '@/lib/items/stockUnits'
 import { ItemLabelStockListClient } from '@/components/items/ItemLabelStockListClient'
+import { ItemUnitOutClient } from '@/components/items/ItemUnitOutClient'
 import { ItemStockLegacyClient } from '@/components/items/ItemStockLegacyClient'
 import { ItemStockLotsClient } from '@/components/items/ItemStockLotsClient'
 import { ItemStockReconcileClient } from '@/components/items/ItemStockReconcileClient'
@@ -44,6 +46,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
     item,
     lots.map(l => ({ lot_code: l.lot_code, quantity: l.quantity })),
   )
+  const stockUnits = lotsTableMissing ? [] : buildStockUnitOptions(lots)
 
   return (
     <div className="space-y-4 max-w-lg">
@@ -90,6 +93,15 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
+        <h2 className="text-base font-semibold text-slate-900">단위별 출고</h2>
+        {lotsTableMissing ? (
+          <p className="text-sm text-slate-500">입고 단위 DB가 없어 단위별 출고를 사용할 수 없습니다.</p>
+        ) : (
+          <ItemUnitOutClient itemId={item.id} itemName={item.name} units={stockUnits} />
+        )}
+      </div>
+
+      <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-slate-900">재고 수량 기준 라벨</h2>
           <span className="text-xs text-slate-500">{labelRows.length}개</span>
@@ -119,9 +131,9 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
 
       <Link
         href={`/move?item=${item.id}`}
-        className="block w-full text-center rounded-xl bg-blue-600 text-white font-medium py-3 shadow-sm"
+        className="block w-full text-center rounded-xl border border-blue-200 bg-blue-50 text-blue-700 font-medium py-3 shadow-sm"
       >
-        입·출고 하기
+        입·출고 화면 열기
       </Link>
     </div>
   )
