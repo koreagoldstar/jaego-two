@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllKnownLotCodesForItem, lotCodeBelongsToItemBase } from '@/lib/items/knownLotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
 
@@ -22,6 +23,15 @@ export async function reconcileItemLotsByScannedCodesAction(itemId: string, form
   const codes = uniqueCodes(String(formData.get('codes') ?? ''))
   if (codes.length === 0) {
     return { ok: false as const, error: '스캔 코드가 없습니다.' }
+  }
+
+  const { itemBase } = await fetchAllKnownLotCodesForItem(supabase, user.id, itemId)
+  const invalid = codes.filter(c => !lotCodeBelongsToItemBase(c, itemBase))
+  if (invalid.length > 0) {
+    return {
+      ok: false as const,
+      error: `품목 QR(${itemBase})와 맞지 않는 코드가 있습니다: ${invalid.slice(0, 3).join(', ')}`,
+    }
   }
 
   const { error: delError } = await supabase

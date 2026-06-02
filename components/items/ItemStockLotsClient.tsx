@@ -12,6 +12,7 @@ import { useCallback, useMemo, useState } from 'react'
 
 type Props = {
   itemId: string
+  itemBarcode: string | null
   lots: ItemStockLot[]
 }
 
@@ -22,7 +23,7 @@ function toDatetimeLocalValue(iso: string) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-export function ItemStockLotsClient({ itemId, lots }: Props) {
+export function ItemStockLotsClient({ itemId, itemBarcode, lots }: Props) {
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -101,9 +102,10 @@ export function ItemStockLotsClient({ itemId, lots }: Props) {
             <input
               name="lot_code"
               type="text"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
-              placeholder="라벨에 찍을 값"
-              required
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-mono"
+              placeholder={
+                itemBarcode ? `${itemBarcode}-001 (비우면 다음 번호 자동)` : '품목 QR 코드를 먼저 등록하세요'
+              }
             />
           </label>
           <label className="text-xs text-slate-500 sm:col-span-2">

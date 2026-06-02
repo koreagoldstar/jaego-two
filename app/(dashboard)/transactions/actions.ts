@@ -1,8 +1,9 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { allocateNextUnitLotCodes } from '@/lib/items/lotCodes'
+import { allocateUnitLotCodesForItem, fetchAllKnownLotCodesForItem } from '@/lib/items/knownLotCodes'
 import { deleteUnitLotsFifo } from '@/lib/items/stockLotFifo'
+import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
 
 function parseDatetimeLocalToIso(s: string): string | null {
@@ -125,13 +126,20 @@ export async function deleteStockTransactionAction(id: string) {
     if (itemError) return { ok: false as const, error: itemError.message }
     if (!item) return { ok: false as const, error: '품목을 찾을 수 없습니다' }
 
-    const { data: lotRows, error: lotError } = await supabase
+    const { itemBase, knownCodes } = await fetchAllKnownLotCodesForItem(supabase, user.id, tx.item_id)
+
+    const { error: lotError } = await supabase
       .from('item_stock_lots')
       .select('lot_code')
       .eq('item_id', tx.item_id)
       .eq('user_id', user.id)
+      .limit(1)
 
-    if (lotError) {
+    if (lotError && !isMissingItemStockLotsTable(lotError)) {
+      return { ok: false as const, error: lotError.message }
+    }
+
+    if (lotError && isMissingItemStockLotsTable(lotError)) {
       const { error: reverseError } = await supabase.rpc('apply_stock_move', {
         p_item_id: tx.item_id,
         p_direction: 'in',
@@ -143,12 +151,7 @@ export async function deleteStockTransactionAction(id: string) {
         return { ok: false as const, error: `재고 되돌리기 실패: ${reverseError.message}` }
       }
     } else {
-      const base =
-        (item.barcode_code ?? '').trim() || `item-${String(tx.item_id).slice(0, 8)}`
-      const existingCodes = (lotRows ?? [])
-        .map(row => (row.lot_code ?? '').trim())
-        .filter(Boolean)
-      const codes = allocateNextUnitLotCodes(base, existingCodes, tx.amount)
+      const codes = allocateUnitLotCodesForItem(itemBase, knownCodes, tx.amount)
       const { error: insError } = await supabase.from('item_stock_lots').insert(
         codes.map(code => ({
           user_id: user.id,

@@ -36,9 +36,9 @@ export function buildItemLabelVariantsFromLots(
       continue
     }
 
-    // 구데이터: 한 행에 수량만 여러 개인 경우 — 인쇄용으로만 접미사 분리
-    const base = stripUnitSuffix(code) || code
-    const payloads = allocateNextUnitLotCodes(base, allLotCodes, qty)
+    // 구데이터: 한 행에 수량만 여러 개인 경우 — 품목 barcode 기준으로만 접미사 분리
+    const itemBase = (item.barcode_code ?? '').trim() || stripUnitSuffix(code) || code
+    const payloads = allocateNextUnitLotCodes(itemBase, allLotCodes, qty)
     for (const payload of payloads) {
       rows.push({
         index: labelIndexFromLotCode(payload),

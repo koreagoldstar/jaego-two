@@ -1,4 +1,5 @@
-const UNIT_SUFFIX_RE = /-(\d{3})(?:-r\d+)?$/i
+/** -001 ~ -999 … -1000 이상(자릿수 자동 증가) */
+const UNIT_SUFFIX_RE = /-(\d{3,})(?:-r\d+)?$/i
 
 export function withUnitSuffix(base: string, index: number, total: number): string {
   if (!base) return ''

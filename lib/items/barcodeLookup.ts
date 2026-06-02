@@ -7,7 +7,7 @@ function unique(values: string[]): string[] {
 }
 
 function parseLegacyBundledLotIndex(code: string): { base: string; index: number } | null {
-  const m = /^(.*)-(\d{3})$/.exec(code.trim())
+  const m = /^(.*)-(\d{3,})$/.exec(code.trim())
   if (!m) return null
   const index = parseInt(m[2], 10)
   if (!Number.isFinite(index) || index < 1) return null

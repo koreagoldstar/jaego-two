@@ -90,7 +90,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
         {lotsTableMissing ? (
           <ItemStockLegacyClient itemId={item.id} quantity={item.quantity} />
         ) : (
-          <ItemStockLotsClient itemId={item.id} lots={lots} />
+          <ItemStockLotsClient itemId={item.id} itemBarcode={item.barcode_code} lots={lots} />
         )}
       </div>
 

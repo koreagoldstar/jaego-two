@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { generateBarcodeValue } from '@/lib/items/codeGeneratorsServer'
-import { allocateNextUnitLotCodes } from '@/lib/items/lotCodes'
+import { allocateUnitLotCodesForItem, fetchAllKnownLotCodesForItem } from '@/lib/items/knownLotCodes'
 import { deleteUnitLotsFifo } from '@/lib/items/stockLotFifo'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { redirect } from 'next/navigation'
@@ -89,19 +89,12 @@ export async function updateItemAction(itemId: string, formData: FormData) {
   }
 
   if (quantity !== effectiveSum) {
-    const { data: codeRows } = await supabase
-      .from('item_stock_lots')
-      .select('lot_code')
-      .eq('item_id', itemId)
-      .eq('user_id', user.id)
-
-    const existingCodes = (codeRows ?? [])
-      .map(row => (row.lot_code ?? '').trim())
-      .filter(Boolean)
+    const { itemBase, knownCodes } = await fetchAllKnownLotCodesForItem(supabase, user.id, itemId)
+    const base = resolvedBarcode.trim() || itemBase
 
     if (quantity > effectiveSum) {
       const addCount = quantity - effectiveSum
-      const newCodes = allocateNextUnitLotCodes(resolvedBarcode, existingCodes, addCount)
+      const newCodes = allocateUnitLotCodesForItem(base, knownCodes, addCount)
       const lotRows = newCodes.map(code => ({
         user_id: user.id,
         item_id: itemId,

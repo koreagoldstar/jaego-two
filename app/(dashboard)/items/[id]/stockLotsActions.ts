@@ -1,7 +1,12 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { allocateNextUnitLotCodes, stripUnitSuffix } from '@/lib/items/lotCodes'
+import {
+  allocateUnitLotCodesForItem,
+  fetchAllKnownLotCodesForItem,
+  lotCodeBelongsToItemBase,
+  resolveSingleUnitLotCode,
+} from '@/lib/items/knownLotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
 
@@ -32,41 +37,23 @@ export async function addItemStockLotAction(itemId: string, formData: FormData) 
 
   const qty = Math.max(1, parseInt(String(formData.get('quantity') ?? '1'), 10) || 1)
   const note = String(formData.get('note') ?? '').trim()
-  const lot_code = String(formData.get('lot_code') ?? '').trim()
-  if (!lot_code) {
-    return {
-      ok: false as const,
-      error:
-        '이 입고의 QR(스캔 코드)를 입력하세요. 라벨에 찍힌 값과 같게 넣어 주세요.',
-    }
-  }
+  const manualLot = String(formData.get('lot_code') ?? '').trim()
   const createdRaw = String(formData.get('created_at') ?? '').trim()
   const created_at = parseDatetimeLocalToIso(createdRaw) ?? new Date().toISOString()
 
-  const { data: existingLots, error: existingError } = await supabase
-    .from('item_stock_lots')
-    .select('lot_code')
-    .eq('item_id', itemId)
-    .eq('user_id', user.id)
+  const { itemBase, knownCodes } = await fetchAllKnownLotCodesForItem(supabase, user.id, itemId)
 
-  if (existingError && !isMissingItemStockLotsTable(existingError)) {
-    return { ok: false as const, error: existingError.message }
-  }
-
-  const existingCodes = (existingLots ?? [])
-    .map(row => (row.lot_code ?? '').trim())
-    .filter(Boolean)
-
+  let unitCodes: string[]
   if (qty === 1) {
-    const code = lot_code.trim()
-    if (existingCodes.some(c => c.toLowerCase() === code.toLowerCase())) {
-      return { ok: false as const, error: '이 품목에 동일한 QR 입고가 이미 있습니다. 다른 코드를 쓰세요.' }
+    const resolved = resolveSingleUnitLotCode(manualLot, itemBase, knownCodes)
+    if (!resolved.ok) return { ok: false as const, error: resolved.error }
+    unitCodes = [resolved.code]
+  } else {
+    unitCodes = allocateUnitLotCodesForItem(itemBase, knownCodes, qty)
+    if (unitCodes.length === 0) {
+      return { ok: false as const, error: '품목 QR 코드를 확인한 뒤 다시 시도하세요.' }
     }
   }
-
-  const base = stripUnitSuffix(lot_code) || lot_code
-  const unitCodes =
-    qty === 1 ? [lot_code.trim()] : allocateNextUnitLotCodes(base, existingCodes, qty)
 
   const insertRows = unitCodes.map(code => ({
     user_id: user.id,
@@ -90,6 +77,7 @@ export async function addItemStockLotAction(itemId: string, formData: FormData) 
   }
   revalidatePath(`/items/${itemId}`)
   revalidatePath('/items')
+  revalidatePath('/barcode')
   return { ok: true as const }
 }
 
@@ -106,8 +94,8 @@ export async function updateItemStockLotAction(
 
   const qty = Math.max(1, parseInt(String(formData.get('quantity') ?? '1'), 10) || 1)
   const note = String(formData.get('note') ?? '').trim()
-  const lot_code = String(formData.get('lot_code') ?? '').trim()
-  if (!lot_code) {
+  const manualLot = String(formData.get('lot_code') ?? '').trim()
+  if (!manualLot) {
     return {
       ok: false as const,
       error: 'QR(스캔 코드)를 비울 수 없습니다. 재고 1개만 줄이려면 아래「재고 수량 기준 라벨」에서 삭제하세요.',
@@ -117,23 +105,17 @@ export async function updateItemStockLotAction(
   const created_at = parseDatetimeLocalToIso(createdRaw)
   if (!created_at) return { ok: false as const, error: '날짜·시간을 확인하세요' }
 
-  const { data: peerLots, error: peerError } = await supabase
-    .from('item_stock_lots')
-    .select('lot_code')
-    .eq('item_id', itemId)
-    .eq('user_id', user.id)
-
-  if (peerError && !isMissingItemStockLotsTable(peerError)) {
-    return { ok: false as const, error: peerError.message }
+  const { itemBase, knownCodes } = await fetchAllKnownLotCodesForItem(supabase, user.id, itemId)
+  if (!lotCodeBelongsToItemBase(manualLot, itemBase)) {
+    return {
+      ok: false as const,
+      error: `QR 코드는 품목 코드「${itemBase}」와 같아야 합니다.`,
+    }
   }
 
-  const peerCodes = (peerLots ?? [])
-    .map(row => (row.lot_code ?? '').trim())
-    .filter(Boolean)
-
-  const base = stripUnitSuffix(lot_code) || lot_code
+  const peerCodes = knownCodes.filter(c => c.toLowerCase() !== manualLot.toLowerCase())
   const unitCodes =
-    qty === 1 ? [lot_code.trim()] : allocateNextUnitLotCodes(base, peerCodes, qty)
+    qty === 1 ? [manualLot] : allocateUnitLotCodesForItem(itemBase, peerCodes, qty)
 
   const { error } = await supabase
     .from('item_stock_lots')
@@ -174,6 +156,7 @@ export async function updateItemStockLotAction(
   }
   revalidatePath(`/items/${itemId}`)
   revalidatePath('/items')
+  revalidatePath('/barcode')
   return { ok: true as const }
 }
 
@@ -215,5 +198,6 @@ export async function deleteItemStockLotAction(itemId: string, lotId: string) {
   }
   revalidatePath(`/items/${itemId}`)
   revalidatePath('/items')
+  revalidatePath('/barcode')
   return { ok: true as const }
 }
