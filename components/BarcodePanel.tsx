@@ -211,12 +211,16 @@ function buildPrintIframeStyles(
   `
 }
 
-function getItemLabelRows(item: Item, lotsByItem: Record<string, StockLotForLabel[]>) {
-  const lots = lotsByItem[item.id]
-  if (lots?.length) {
-    return buildItemLabelVariantsFromLots(item, lots).filter(row => row.payload)
+function getItemLabelRows(
+  item: Item,
+  lotsByItem: Record<string, StockLotForLabel[]>,
+  stockLotsMode: boolean,
+  legacyKnownCodes: string[]
+) {
+  if (stockLotsMode) {
+    return buildItemLabelVariantsFromLots(item, lotsByItem[item.id] ?? []).filter(row => row.payload)
   }
-  return buildItemLabelVariants(item).filter(row => row.payload)
+  return buildItemLabelVariants(item, legacyKnownCodes).filter(row => row.payload)
 }
 
 function sanitizeFilePart(s: string): string {
@@ -373,6 +377,8 @@ export function BarcodePanel() {
 
   const [items, setItems] = useState<Item[]>([])
   const [lotsByItem, setLotsByItem] = useState<Record<string, StockLotForLabel[]>>({})
+  const [stockLotsMode, setStockLotsMode] = useState(true)
+  const [legacyKnownLotCodes, setLegacyKnownLotCodes] = useState<string[]>([])
   const [itemsLoading, setItemsLoading] = useState(true)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState('')
@@ -390,25 +396,52 @@ export function BarcodePanel() {
         setItemsLoading(false)
         return
       }
-      const [{ data }, { data: lotRows }] = await Promise.all([
-        supabase.from('items').select('*').eq('user_id', user.id).order('name'),
-        supabase
-          .from('item_stock_lots')
-          .select('item_id, lot_code, quantity, created_at')
+      const { data } = await supabase.from('items').select('*').eq('user_id', user.id).order('name')
+      const itemList = (data ?? []) as Item[]
+
+      const lotRes = await supabase
+        .from('item_stock_lots')
+        .select('item_id, lot_code, quantity, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+
+      const lotsAvailable = !lotRes.error
+      let knownFromTx: string[] = []
+
+      if (!lotsAvailable) {
+        const txRes = await supabase
+          .from('stock_transactions')
+          .select('lot_code')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: true }),
-      ])
+          .not('lot_code', 'is', null)
+          .neq('lot_code', '')
+          .limit(5000)
+        knownFromTx = (txRes.data ?? []).flatMap((row: { lot_code?: string | null }) =>
+          (row.lot_code ?? '')
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        )
+      }
+
       if (!cancelled) {
-        setItems((data ?? []) as Item[])
+        setItems(itemList)
+        setStockLotsMode(lotsAvailable)
+        setLegacyKnownLotCodes(knownFromTx)
+
         const grouped: Record<string, StockLotForLabel[]> = {}
-        for (const row of lotRows ?? []) {
-          const itemId = String(row.item_id ?? '')
-          if (!itemId) continue
-          if (!grouped[itemId]) grouped[itemId] = []
-          grouped[itemId].push({
-            lot_code: row.lot_code ?? null,
-            quantity: row.quantity ?? 0,
-          })
+        for (const item of itemList) {
+          grouped[item.id] = []
+        }
+        if (lotsAvailable) {
+          for (const row of lotRes.data ?? []) {
+            const itemId = String(row.item_id ?? '')
+            if (!itemId || !grouped[itemId]) continue
+            grouped[itemId].push({
+              lot_code: row.lot_code ?? null,
+              quantity: row.quantity ?? 0,
+            })
+          }
         }
         setLotsByItem(grouped)
         setItemsLoading(false)
@@ -424,11 +457,12 @@ export function BarcodePanel() {
       const next = new Set<string>()
       prev.forEach(id => {
         const item = items.find(i => i.id === id)
-        if (item && getItemLabelRows(item, lotsByItem).length > 0) next.add(id)
+        if (item && getItemLabelRows(item, lotsByItem, stockLotsMode, legacyKnownLotCodes).length > 0)
+          next.add(id)
       })
       return next
     })
-  }, [items, lotsByItem])
+  }, [items, lotsByItem, stockLotsMode, legacyKnownLotCodes])
 
   const filteredItems = useMemo(() => {
     const q = filter.trim().toLowerCase()
@@ -445,14 +479,14 @@ export function BarcodePanel() {
   const itemRows = useMemo(
     () =>
       selectedList.flatMap(item =>
-        getItemLabelRows(item, lotsByItem).map(row => ({
+        getItemLabelRows(item, lotsByItem, stockLotsMode, legacyKnownLotCodes).map(row => ({
           item,
           unitIndex: row.index,
           payload: row.payload!,
           barcode: row.barcode,
         }))
       ),
-    [selectedList, lotsByItem]
+    [selectedList, lotsByItem, stockLotsMode, legacyKnownLotCodes]
   )
 
   const validItemRows = itemRows
@@ -470,11 +504,11 @@ export function BarcodePanel() {
     setSelected(prev => {
       const next = new Set(prev)
       filteredItems.forEach(i => {
-        if (getItemLabelRows(i, lotsByItem).length > 0) next.add(i.id)
+        if (getItemLabelRows(i, lotsByItem, stockLotsMode, legacyKnownLotCodes).length > 0) next.add(i.id)
       })
       return next
     })
-  }, [filteredItems, lotsByItem])
+  }, [filteredItems, lotsByItem, stockLotsMode, legacyKnownLotCodes])
 
   const clearSelection = useCallback(() => setSelected(new Set()), [])
 
@@ -839,7 +873,8 @@ export function BarcodePanel() {
       {mode === 'items' ? (
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
-            품목에 저장된 <strong className="text-slate-800">QR 스캔 코드</strong>를 라벨로 만듭니다.
+            품목에 저장된 <strong className="text-slate-800">현재 재고</strong> 단위 QR만 라벨로 만듭니다. 이미 출고된 번호(
+            -001 등)는 다시 나오지 않습니다.
           </p>
           {itemsLoading ? (
             <div className="flex justify-center py-8 text-slate-500">
@@ -878,7 +913,7 @@ export function BarcodePanel() {
               </div>
               <div className="max-h-[min(52vh,360px)] overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
                 {filteredItems.map(item => {
-                  const rows = getItemLabelRows(item, lotsByItem)
+                  const rows = getItemLabelRows(item, lotsByItem, stockLotsMode, legacyKnownLotCodes)
                   const pCount = rows.length
                   const sampleCode = rows[0]?.payload ?? rows[0]?.barcode ?? null
                   const checked = selected.has(item.id)

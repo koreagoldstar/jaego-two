@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import type { Item, ItemStockLot } from '@/lib/supabase/types'
-import { buildItemLabelVariantsFromLots } from '@/lib/items/labelVariants'
+import { buildItemLabelVariants, buildItemLabelVariantsFromLots } from '@/lib/items/labelVariants'
 import { buildStockUnitOptions } from '@/lib/items/stockUnits'
 import { ItemLabelStockListClient } from '@/components/items/ItemLabelStockListClient'
 import { ItemUnitOutClient } from '@/components/items/ItemUnitOutClient'
@@ -42,10 +42,12 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
   const lotsLoadError = lotsErr && !lotsTableMissing ? lotsErr.message : null
   const lots = (lotsTableMissing ? [] : (lotRows ?? [])) as ItemStockLot[]
   const lotCodes = lots.map(l => (l.lot_code ?? '').trim()).filter(Boolean)
-  const labelRows = buildItemLabelVariantsFromLots(
-    item,
-    lots.map(l => ({ lot_code: l.lot_code, quantity: l.quantity })),
-  )
+  const labelRows = lotsTableMissing
+    ? buildItemLabelVariants(item)
+    : buildItemLabelVariantsFromLots(
+        item,
+        lots.map(l => ({ lot_code: l.lot_code, quantity: l.quantity })),
+      )
   const stockUnits = lotsTableMissing ? [] : buildStockUnitOptions(lots)
 
   return (

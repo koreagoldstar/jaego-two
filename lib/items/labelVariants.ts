@@ -50,19 +50,19 @@ export function buildItemLabelVariantsFromLots(
 
   rows.sort((a, b) => a.index - b.index || (a.barcode ?? '').localeCompare(b.barcode ?? ''))
 
-  if (rows.length > 0) return rows
-  return buildItemLabelVariants(item)
+  // 출고로 lot가 없으면 라벨 없음 (수량 폴백 시 -001 등이 다시 보이는 문제 방지)
+  return rows
 }
 
-/** lot 테이블 없을 때만: 현재 재고 수량만큼 신규 번호로 임시 생성 */
-export function buildItemLabelVariants(item: Item): ItemLabelVariant[] {
+/** lot 테이블 없을 때만: 현재 재고 수량만큼 번호 발급 (기존 번호는 재사용하지 않음) */
+export function buildItemLabelVariants(item: Item, existingLotCodes: string[] = []): ItemLabelVariant[] {
   const qty = Math.max(0, Number(item.quantity) || 0)
   if (qty <= 0) return []
 
   const baseBarcode = item.barcode_code?.trim() ?? ''
   if (!baseBarcode) return []
 
-  const codes = allocateNextUnitLotCodes(baseBarcode, [], qty)
+  const codes = allocateNextUnitLotCodes(baseBarcode, existingLotCodes, qty)
   return codes
     .map(payload => ({
       index: labelIndexFromLotCode(payload),
