@@ -1,8 +1,6 @@
 -- ============================================================
--- 전체 초기화 + 최신 스키마 한 번에 (Supabase SQL Editor → Run 1회)
--- ⚠️ 아래 테이블 데이터 전부 삭제됩니다 (로그인 계정은 유지):
---   item_stock_lots, stock_transactions, inventory_events,
---   project_usage_plans, items
+-- 데이터 유지 · RPC/스키마만 최신으로 (품목·이력 삭제 없음)
+-- Supabase SQL Editor → 붙여넣기 → Run 한 번
 -- ============================================================
 
 do $$
@@ -20,120 +18,46 @@ begin
   end loop;
 end $$;
 
-drop table if exists public.item_stock_lots cascade;
-drop table if exists public.inventory_events cascade;
-drop table if exists public.project_usage_plans cascade;
-drop table if exists public.stock_transactions cascade;
-drop table if exists public.items cascade;
+alter table public.items add column if not exists barcode_code text default '';
+alter table public.items add column if not exists serial_number text default '';
+alter table public.items add column if not exists sh text default '';
+alter table public.items add column if not exists location text default '';
+alter table public.items add column if not exists description text default '';
+alter table public.items add column if not exists quantity integer default 0;
+alter table public.items add column if not exists created_at timestamptz default now();
+alter table public.items add column if not exists updated_at timestamptz default now();
 
-create extension if not exists pgcrypto;
+alter table public.stock_transactions add column if not exists project text default '' not null;
+alter table public.stock_transactions add column if not exists lot_code text default '' not null;
 
-create table public.items (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users (id) on delete cascade,
-  name text not null,
-  description text default '' not null,
-  sh text default '',
-  barcode_code text default '',
-  serial_number text default '',
-  quantity integer not null default 0 check (quantity >= 0),
-  location text default '',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create unique index items_user_barcode_unique
-  on public.items (user_id, barcode_code)
-  where barcode_code is not null and barcode_code <> '';
-
-create table public.stock_transactions (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users (id) on delete cascade,
-  item_id uuid not null references public.items (id) on delete cascade,
-  direction text not null check (direction in ('in', 'out')),
-  amount integer not null check (amount > 0),
-  note text default '',
-  project text default '' not null,
-  lot_code text default '' not null,
-  created_at timestamptz not null default now()
-);
-
-create table public.item_stock_lots (
+create table if not exists public.item_stock_lots (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   item_id uuid not null references public.items (id) on delete cascade,
   quantity integer not null check (quantity > 0),
-  lot_code text not null default '',
   note text default '' not null,
   created_at timestamptz not null default now()
 );
 
-create unique index item_stock_lots_unique_qr_per_item
+alter table public.item_stock_lots add column if not exists lot_code text not null default '';
+
+create unique index if not exists item_stock_lots_unique_qr_per_item
   on public.item_stock_lots (user_id, item_id, (lower(btrim(lot_code))))
   where btrim(lot_code) <> '';
 
-create index item_stock_lots_item_idx
+create index if not exists item_stock_lots_item_idx
   on public.item_stock_lots (item_id, created_at asc);
 
-create table public.inventory_events (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users (id) on delete cascade,
-  item_id uuid null references public.items (id) on delete set null,
-  event_type text not null check (event_type in ('item_create', 'item_delete')),
-  item_name text not null,
-  quantity integer not null default 0 check (quantity >= 0),
-  detail text default '',
-  created_at timestamptz not null default now()
-);
-
-create table public.project_usage_plans (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users (id) on delete cascade,
-  project_name text not null,
-  install_date date,
-  item_id uuid not null references public.items (id) on delete cascade,
-  planned_qty integer not null default 0 check (planned_qty >= 0),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index items_user_idx on public.items (user_id);
-create index stock_tx_user_idx on public.stock_transactions (user_id);
-create index stock_tx_item_idx on public.stock_transactions (item_id);
-create index inventory_events_user_idx on public.inventory_events (user_id, created_at desc);
-create unique index project_usage_plans_unique on public.project_usage_plans (user_id, project_name, item_id);
-create index project_usage_plans_user_idx on public.project_usage_plans (user_id, project_name);
-create index project_usage_plans_install_date_idx on public.project_usage_plans (user_id, install_date, project_name);
-
-alter table public.items enable row level security;
-alter table public.stock_transactions enable row level security;
 alter table public.item_stock_lots enable row level security;
-alter table public.inventory_events enable row level security;
-alter table public.project_usage_plans enable row level security;
 
-create policy items_select on public.items for select using (auth.uid() = user_id);
-create policy items_insert on public.items for insert with check (auth.uid() = user_id);
-create policy items_update on public.items for update using (auth.uid() = user_id);
-create policy items_delete on public.items for delete using (auth.uid() = user_id);
-
-create policy tx_select on public.stock_transactions for select using (auth.uid() = user_id);
-create policy tx_insert on public.stock_transactions for insert with check (auth.uid() = user_id);
-create policy tx_update on public.stock_transactions for update using (auth.uid() = user_id);
-create policy tx_delete on public.stock_transactions for delete using (auth.uid() = user_id);
-
+drop policy if exists item_stock_lots_select on public.item_stock_lots;
 create policy item_stock_lots_select on public.item_stock_lots for select using (auth.uid() = user_id);
+drop policy if exists item_stock_lots_insert on public.item_stock_lots;
 create policy item_stock_lots_insert on public.item_stock_lots for insert with check (auth.uid() = user_id);
+drop policy if exists item_stock_lots_update on public.item_stock_lots;
 create policy item_stock_lots_update on public.item_stock_lots for update using (auth.uid() = user_id);
+drop policy if exists item_stock_lots_delete on public.item_stock_lots;
 create policy item_stock_lots_delete on public.item_stock_lots for delete using (auth.uid() = user_id);
-
-create policy inventory_events_select on public.inventory_events for select using (auth.uid() = user_id);
-create policy inventory_events_insert on public.inventory_events for insert with check (auth.uid() = user_id);
-create policy inventory_events_update on public.inventory_events for update using (auth.uid() = user_id);
-create policy inventory_events_delete on public.inventory_events for delete using (auth.uid() = user_id);
-create policy project_usage_plans_select on public.project_usage_plans for select using (auth.uid() = user_id);
-create policy project_usage_plans_insert on public.project_usage_plans for insert with check (auth.uid() = user_id);
-create policy project_usage_plans_update on public.project_usage_plans for update using (auth.uid() = user_id);
-create policy project_usage_plans_delete on public.project_usage_plans for delete using (auth.uid() = user_id);
 
 create or replace function public.sync_item_quantity_from_lots()
 returns trigger
@@ -164,6 +88,7 @@ begin
 end;
 $$;
 
+drop trigger if exists trg_sync_item_qty_from_lots on public.item_stock_lots;
 create trigger trg_sync_item_qty_from_lots
   after insert or update or delete on public.item_stock_lots
   for each row

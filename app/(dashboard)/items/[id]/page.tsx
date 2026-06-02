@@ -42,12 +42,18 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
   const lotsLoadError = lotsErr && !lotsTableMissing ? lotsErr.message : null
   const lots = (lotsTableMissing ? [] : (lotRows ?? [])) as ItemStockLot[]
   const lotCodes = lots.map(l => (l.lot_code ?? '').trim()).filter(Boolean)
-  const labelRows = lotsTableMissing
-    ? buildItemLabelVariants(item)
-    : buildItemLabelVariantsFromLots(
-        item,
-        lots.map(l => ({ lot_code: l.lot_code, quantity: l.quantity })),
-      )
+  const labelRows = (() => {
+    if (lotsTableMissing) return buildItemLabelVariants(item)
+    const fromLots = buildItemLabelVariantsFromLots(
+      item,
+      lots.map(l => ({ lot_code: l.lot_code, quantity: l.quantity })),
+    )
+    if (fromLots.length > 0) return fromLots
+    if ((item.quantity ?? 0) > 0 && item.barcode_code?.trim()) {
+      return buildItemLabelVariants(item, lotCodes)
+    }
+    return fromLots
+  })()
   const stockUnits = lotsTableMissing ? [] : buildStockUnitOptions(lots)
 
   return (

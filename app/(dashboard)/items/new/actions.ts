@@ -95,6 +95,15 @@ export async function createItemAction(formData: FormData) {
       } else {
         redirect('/items/new?error=' + encodeURIComponent(lotErr.message))
       }
+    } else {
+      const { error: upErr } = await supabase
+        .from('items')
+        .update({ quantity, updated_at: new Date().toISOString() })
+        .eq('id', inserted.id)
+        .eq('user_id', user.id)
+      if (upErr) {
+        redirect('/items/new?error=' + encodeURIComponent(upErr.message))
+      }
     }
   }
 
@@ -195,6 +204,14 @@ export async function createItemsBatchAction(formData: FormData) {
         }
       } else {
         redirect('/items/new?error=' + encodeURIComponent(lotErr.message))
+      }
+    } else {
+      for (const row of createdRows ?? []) {
+        await supabase
+          .from('items')
+          .update({ quantity: quantityEach, updated_at: new Date().toISOString() })
+          .eq('id', row.id)
+          .eq('user_id', user.id)
       }
     }
   }

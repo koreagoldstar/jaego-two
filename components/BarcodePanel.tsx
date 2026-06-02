@@ -24,6 +24,38 @@ type LabelPreset = {
   heightMm: number
 }
 
+const LOTS_PAGE_SIZE = 1000
+
+/** PostgREST 기본 최대 1000행 — lot가 많으면 뒤쪽 품목(신규 포함)이 잘려 바코드 선택 불가 */
+async function fetchAllUserStockLots(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+) {
+  type LotRow = {
+    item_id: string
+    lot_code: string | null
+    quantity: number
+    created_at: string
+  }
+  const all: LotRow[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('item_stock_lots')
+      .select('item_id, lot_code, quantity, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + LOTS_PAGE_SIZE - 1)
+    if (error) return { data: all, error }
+    const page = (data ?? []) as LotRow[]
+    all.push(...page)
+    if (page.length < LOTS_PAGE_SIZE) break
+    from += LOTS_PAGE_SIZE
+  }
+  return { data: all, error: null }
+}
+
 const LABEL_PRESETS: LabelPreset[] = [
   { key: '40x20', label: '40 × 20mm', widthMm: 40, heightMm: 20 },
   { key: '40x30', label: '40 × 30mm', widthMm: 40, heightMm: 30 },
@@ -211,16 +243,46 @@ function buildPrintIframeStyles(
   `
 }
 
+function barcodeItemHint(
+  item: Item,
+  labelCount: number,
+  stockLotsMode: boolean,
+  lotRowCount: number,
+): string {
+  if (labelCount > 0) return ''
+  const qty = Math.max(0, Number(item.quantity) || 0)
+  if (qty <= 0) return '현재 재고 0 — 입고 후 라벨이 생깁니다'
+  if (!stockLotsMode) {
+    if (!item.barcode_code?.trim()) return '품목 QR 코드 없음 — 품목 수정에서 입력'
+    return '입고 단위 DB를 불러오지 못했습니다 — 새로고침 후 다시 시도'
+  }
+  if (lotRowCount === 0) {
+    return '입고 단위 없음 — 품목 추가 시 초기 수량 1 이상 또는 입고 후 이용'
+  }
+  return '단위 QR 비어 있음 — 품목 상세에서 입고 또는 Supabase backfill 실행'
+}
+
 function getItemLabelRows(
   item: Item,
   lotsByItem: Record<string, StockLotForLabel[]>,
   stockLotsMode: boolean,
   legacyKnownCodes: string[]
 ) {
+  const itemLots = lotsByItem[item.id] ?? []
+  const itemKnownCodes = itemLots.map(l => (l.lot_code ?? '').trim()).filter(Boolean)
+
   if (stockLotsMode) {
-    return buildItemLabelVariantsFromLots(item, lotsByItem[item.id] ?? []).filter(row => row.payload)
+    const fromLots = buildItemLabelVariantsFromLots(item, itemLots).filter(row => row.payload)
+    if (fromLots.length > 0) return fromLots
+
+    const qty = Math.max(0, Number(item.quantity) || 0)
+    if (qty > 0 && item.barcode_code?.trim()) {
+      return buildItemLabelVariants(item, itemKnownCodes).filter(row => row.payload)
+    }
+    return []
   }
-  return buildItemLabelVariants(item, legacyKnownCodes).filter(row => row.payload)
+
+  return buildItemLabelVariants(item, [...itemKnownCodes, ...legacyKnownCodes]).filter(row => row.payload)
 }
 
 function sanitizeFilePart(s: string): string {
@@ -399,11 +461,7 @@ export function BarcodePanel() {
       const { data } = await supabase.from('items').select('*').eq('user_id', user.id).order('name')
       const itemList = (data ?? []) as Item[]
 
-      const lotRes = await supabase
-        .from('item_stock_lots')
-        .select('item_id, lot_code, quantity, created_at')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
+      const lotRes = await fetchAllUserStockLots(supabase, user.id)
 
       const lotsAvailable = !lotRes.error
       let knownFromTx: string[] = []
@@ -434,7 +492,7 @@ export function BarcodePanel() {
           grouped[item.id] = []
         }
         if (lotsAvailable) {
-          for (const row of lotRes.data ?? []) {
+          for (const row of lotRes.data) {
             const itemId = String(row.item_id ?? '')
             if (!itemId || !grouped[itemId]) continue
             grouped[itemId].push({
@@ -913,8 +971,10 @@ export function BarcodePanel() {
               </div>
               <div className="max-h-[min(52vh,360px)] overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
                 {filteredItems.map(item => {
+                  const itemLots = lotsByItem[item.id] ?? []
                   const rows = getItemLabelRows(item, lotsByItem, stockLotsMode, legacyKnownLotCodes)
                   const pCount = rows.length
+                  const emptyHint = barcodeItemHint(item, pCount, stockLotsMode, itemLots.length)
                   const sampleCode = rows[0]?.payload ?? rows[0]?.barcode ?? null
                   const checked = selected.has(item.id)
                   return (
@@ -946,7 +1006,7 @@ export function BarcodePanel() {
                               ) : null}
                             </>
                           ) : (
-                            <span className="text-amber-700">QR 스캔 코드가 필요합니다</span>
+                            <span className="text-amber-700">{emptyHint || 'QR 스캔 코드가 필요합니다'}</span>
                           )}
                         </p>
                       </div>
