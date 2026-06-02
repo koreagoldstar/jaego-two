@@ -1,16 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { normalizeBarcodePayload, to1DBarcodeSafeString } from '@/lib/items/barcodePayload'
-
-function stripUnitSuffix(code: string): string {
-  return code.replace(/-(\d{3})$/, '')
-}
+import { parseUnitSuffixIndex, stripUnitSuffix } from '@/lib/items/lotCodes'
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.map(v => v.trim()).filter(Boolean)))
 }
 
-function parseUnitSuffix(code: string): { base: string; index: number } | null {
-  const m = /^(.*)-(\d{3})$/.exec(code)
+function parseLegacyBundledLotIndex(code: string): { base: string; index: number } | null {
+  const m = /^(.*)-(\d{3})$/.exec(code.trim())
   if (!m) return null
   const index = parseInt(m[2], 10)
   if (!Number.isFinite(index) || index < 1) return null
@@ -20,6 +17,70 @@ function parseUnitSuffix(code: string): { base: string; index: number } | null {
 export type BarcodeLookupResult = {
   itemId: string
   lotId: string | null
+  /** 재고(lot)에 없고 단위 QR(-001 등)만 스캔된 경우 */
+  alreadyShipped?: boolean
+}
+
+export const ALREADY_SHIPPED_MESSAGE = '이미 출고된 제품입니다.'
+
+function lotCodeListedInField(field: string | null | undefined, lotCode: string): boolean {
+  const target = lotCode.trim().toLowerCase()
+  if (!target) return false
+  return (field ?? '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .some(s => s === target)
+}
+
+async function findItemIdByBarcodeCandidates(
+  supabase: SupabaseClient,
+  userId: string,
+  candidates: string[]
+): Promise<string | null> {
+  for (const candidate of candidates) {
+    const { data: byBarcode } = await supabase
+      .from('items')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('barcode_code', candidate)
+      .maybeSingle()
+    if (byBarcode?.id) return byBarcode.id
+  }
+  return null
+}
+
+async function wasUnitLotAlreadyShipped(
+  supabase: SupabaseClient,
+  userId: string,
+  lotCode: string,
+  itemId: string
+): Promise<boolean> {
+  const { data: activeLot } = await supabase
+    .from('item_stock_lots')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('item_id', itemId)
+    .eq('lot_code', lotCode)
+    .limit(1)
+    .maybeSingle()
+  if (activeLot?.id) return false
+
+  const { data: outs } = await supabase
+    .from('stock_transactions')
+    .select('lot_code')
+    .eq('user_id', userId)
+    .eq('item_id', itemId)
+    .eq('direction', 'out')
+    .not('lot_code', 'is', null)
+    .neq('lot_code', '')
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if ((outs ?? []).some(row => lotCodeListedInField(row.lot_code, lotCode))) {
+    return true
+  }
+
+  return parseUnitSuffixIndex(lotCode) !== null
 }
 
 /** 사용자 품목 중 스캔 문자열로 품목·입고 단위 조회 */
@@ -31,21 +92,14 @@ export async function findItemByBarcode(
   const code = normalizeBarcodePayload(rawCode)
   if (!code) return null
 
-  const base = () =>
-    supabase.from('items').select('id').eq('user_id', userId)
-
   const safeCode = to1DBarcodeSafeString(code)
-  const rawCandidates = unique([
-    code,
-    safeCode,
-    code.toUpperCase(),
-    safeCode.toUpperCase(),
-    stripUnitSuffix(code),
-    stripUnitSuffix(safeCode),
-  ])
-  const barcodeCandidates = rawCandidates
+  const hasUnitSuffix = parseUnitSuffixIndex(code) !== null
+  const lotCandidates = unique([code, safeCode, code.toUpperCase(), safeCode.toUpperCase()])
+  const itemBarcodeCandidates = hasUnitSuffix
+    ? lotCandidates.filter(c => parseUnitSuffixIndex(c) !== null)
+    : unique([...lotCandidates, stripUnitSuffix(code), stripUnitSuffix(safeCode)])
 
-  for (const candidate of barcodeCandidates) {
+  for (const candidate of lotCandidates) {
     const { data: byLot, error: lotError } = await supabase
       .from('item_stock_lots')
       .select('item_id, id')
@@ -58,8 +112,8 @@ export async function findItemByBarcode(
     }
   }
 
-  for (const candidate of barcodeCandidates) {
-    const parsed = parseUnitSuffix(candidate)
+  for (const candidate of lotCandidates) {
+    const parsed = parseLegacyBundledLotIndex(candidate)
     if (!parsed) continue
     const { data: byBaseLot, error: baseLotError } = await supabase
       .from('item_stock_lots')
@@ -74,12 +128,24 @@ export async function findItemByBarcode(
     }
   }
 
-  for (const candidate of barcodeCandidates) {
-    const { data: byBarcode } = await base().eq('barcode_code', candidate).maybeSingle()
-    if (byBarcode?.id) return { itemId: byBarcode.id, lotId: null }
+  if (hasUnitSuffix) {
+    const itemId = await findItemIdByBarcodeCandidates(supabase, userId, [
+      stripUnitSuffix(code),
+      stripUnitSuffix(safeCode),
+      ...itemBarcodeCandidates,
+    ])
+    if (!itemId) return null
+
+    const shipped = await wasUnitLotAlreadyShipped(supabase, userId, code, itemId)
+    if (shipped) {
+      return { itemId, lotId: null, alreadyShipped: true }
+    }
+    return null
   }
 
-  /* 부분 일치는 와일드카드 문자가 섞이면 쿼리가 깨질 수 있어 제한 */
+  const itemId = await findItemIdByBarcodeCandidates(supabase, userId, itemBarcodeCandidates)
+  if (itemId) return { itemId, lotId: null }
+
   if (code.length >= 2 && !/[%_]/.test(code)) {
     const { data: loose } = await supabase
       .from('items')
@@ -102,5 +168,6 @@ export async function findItemIdByBarcode(
   rawCode: string
 ): Promise<string | null> {
   const hit = await findItemByBarcode(supabase, userId, rawCode)
-  return hit?.itemId ?? null
+  if (!hit || hit.alreadyShipped) return null
+  return hit.itemId
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { findItemIdByBarcode } from '@/lib/items/barcodeLookup'
+import { ALREADY_SHIPPED_MESSAGE, findItemByBarcode } from '@/lib/items/barcodeLookup'
 import type { Item } from '@/lib/supabase/types'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
 import { Loader2, Trash2 } from 'lucide-react'
@@ -81,11 +81,17 @@ export function BulkOutClient() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const id = await findItemIdByBarcode(supabase, user.id, trimmed)
-      if (!id) {
+      const hit = await findItemByBarcode(supabase, user.id, trimmed)
+      if (hit?.alreadyShipped) {
+        window.alert(ALREADY_SHIPPED_MESSAGE)
+        setMsg({ type: 'err', text: ALREADY_SHIPPED_MESSAGE })
+        return
+      }
+      if (!hit) {
         setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
         return
       }
+      const id = hit.itemId
       const selectedProject = project.trim()
       if (selectedProject) {
         const allowed = projectItemMap[selectedProject] ?? []

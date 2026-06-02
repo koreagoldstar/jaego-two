@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { findItemByBarcode } from '@/lib/items/barcodeLookup'
+import { ALREADY_SHIPPED_MESSAGE, findItemByBarcode } from '@/lib/items/barcodeLookup'
 import { buildStockUnitOptions, formatStockUnitLabel, type StockUnitOption } from '@/lib/items/stockUnits'
 import type { Item, ItemStockLot } from '@/lib/supabase/types'
 import { StockUnitPicker } from '@/components/stock/StockUnitPicker'
@@ -174,6 +174,11 @@ export function MoveStockClient() {
     if (!user) return
 
     const hit = await findItemByBarcode(supabase, user.id, trimmed)
+    if (hit?.alreadyShipped) {
+      window.alert(ALREADY_SHIPPED_MESSAGE)
+      setMsg({ type: 'err', text: ALREADY_SHIPPED_MESSAGE })
+      return
+    }
     if (hit) {
       const { itemId: id, lotId } = hit
       const selectedProject = project.trim()
