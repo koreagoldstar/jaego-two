@@ -164,6 +164,16 @@ function buildPrintIframeStyles(
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      .encoding {
+        margin: 0.15mm 0 0;
+        font-size: ${compact ? '4.6pt' : '5.4pt'};
+        line-height: 1.1;
+        text-align: center;
+        word-break: break-all;
+        font-family: ui-monospace, monospace;
+        flex-shrink: 0;
+        max-width: 100%;
+      }
       .barcode-wrap {
         flex: 1 1 auto;
         min-height: 0;
@@ -211,6 +221,11 @@ function getItemLabelRows(item: Item, lotsByItem: Record<string, StockLotForLabe
 
 function sanitizeFilePart(s: string): string {
   return s.slice(0, 48).replace(/[/\\?%*:|"<>]/g, '-').trim() || 'item'
+}
+
+function qrCodeDisplayLine(payload: string): string {
+  const p = normalizeBarcodePayload(payload)
+  return p ? `QR 코드: ${p}` : ''
 }
 
 type CodeFormat = 'CODE128' | 'CODE39' | 'QR'
@@ -316,20 +331,6 @@ function BarcodeStrip({
           ))}
         </div>
       )}
-      {showEncodingLine && (
-        <div className="text-[11px] print:text-[6.5pt] text-slate-500 text-center px-1 max-w-full space-y-0.5">
-          <p className="break-all">
-            {format === 'QR'
-              ? payload
-              : (() => {
-                  const safe = to1DBarcodeSafeString(payload)
-                  return is1DBarcodePayloadLossy(payload, safe)
-                    ? `${safe} · (한글 등은 1D에 미포함 — QR 권장)`
-                    : safe
-                })()}
-          </p>
-        </div>
-      )}
       <canvas
         ref={ref}
         className="max-w-full h-auto"
@@ -346,6 +347,20 @@ function BarcodeStrip({
               }
         }
       />
+      {(showEncodingLine || format === 'QR') && normalizeBarcodePayload(payload) && (
+        <div className="text-[11px] print:text-[6.5pt] text-slate-700 text-center px-1 max-w-full">
+          <p className="break-all font-mono leading-tight">
+            {format === 'QR'
+              ? qrCodeDisplayLine(payload)
+              : (() => {
+                  const safe = to1DBarcodeSafeString(payload)
+                  return is1DBarcodePayloadLossy(payload, safe)
+                    ? `${safe} · (한글 등은 1D에 미포함 — QR 권장)`
+                    : safe
+                })()}
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -675,7 +690,7 @@ export function BarcodePanel() {
           ]
         : validItemRows.map(({ item, payload, unitIndex }) => ({
             caption: `${item.name} #${unitIndex}`,
-            metaLines: [item.barcode_code ? `코드: ${item.barcode_code}` : ''].filter(Boolean),
+            metaLines: [],
             payload,
           }))
 
@@ -690,6 +705,8 @@ export function BarcodePanel() {
       if (!dataUrl) continue
       const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
       const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
+      const codeLine = qrCodeDisplayLine(label.payload)
+      const encodingHtml = codeLine ? `<p class="encoding">${escapeHtml(codeLine)}</p>` : ''
       parts.push(`
           <section class="label">
             ${captionHtml}
@@ -697,6 +714,7 @@ export function BarcodePanel() {
             <div class="barcode-wrap">
               <img class="barcode${format !== 'QR' ? ' barcode-crisp' : ''}" src="${dataUrl}" alt="" />
             </div>
+            ${encodingHtml}
           </section>
         `)
     }
@@ -860,7 +878,9 @@ export function BarcodePanel() {
               </div>
               <div className="max-h-[min(52vh,360px)] overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
                 {filteredItems.map(item => {
-                  const pCount = getItemLabelRows(item, lotsByItem).length
+                  const rows = getItemLabelRows(item, lotsByItem)
+                  const pCount = rows.length
+                  const sampleCode = rows[0]?.payload ?? rows[0]?.barcode ?? null
                   const checked = selected.has(item.id)
                   return (
                     <label
@@ -882,6 +902,13 @@ export function BarcodePanel() {
                           {pCount > 0 ? (
                             <>
                               재고 기준 라벨: <span className="font-mono text-slate-700">{pCount}개</span>
+                              {sampleCode ? (
+                                <>
+                                  {' '}
+                                  · <span className="font-mono text-slate-600 break-all">{sampleCode}</span>
+                                  {pCount > 1 ? ' …' : ''}
+                                </>
+                              ) : null}
                             </>
                           ) : (
                             <span className="text-amber-700">QR 스캔 코드가 필요합니다</span>
@@ -922,7 +949,7 @@ export function BarcodePanel() {
                 <BarcodeStrip
                   payload={manualPayload}
                   format={format}
-                  showEncodingLine={false}
+                  showEncodingLine
                   paperHeightMm={hMm}
                 />
               ) : (
@@ -945,8 +972,8 @@ export function BarcodePanel() {
                     payload={payload}
                     format={format}
                     caption={`${item.name} #${unitIndex}`}
-                    metaLines={[item.barcode_code ? `코드: ${item.barcode_code}` : ''].filter(Boolean)}
-                    showEncodingLine={false}
+                    metaLines={[]}
+                    showEncodingLine
                     paperHeightMm={hMm}
                   />
                 ))
