@@ -28,7 +28,8 @@ export function lotCodeBelongsToItemBase(lotCode: string, itemBase: string): boo
 export async function fetchAllKnownLotCodesForItem(
   supabase: SupabaseClient,
   userId: string,
-  itemId: string
+  itemId: string,
+  options?: { excludeTransactionId?: string },
 ): Promise<{ itemBase: string; knownCodes: string[] }> {
   const { data: item } = await supabase
     .from('items')
@@ -40,15 +41,21 @@ export async function fetchAllKnownLotCodesForItem(
   const itemBase = resolveItemLotBase(item?.barcode_code, itemId)
   const codes = new Set<string>()
 
+  let txQuery = supabase
+    .from('stock_transactions')
+    .select('lot_code')
+    .eq('item_id', itemId)
+    .eq('user_id', userId)
+    .not('lot_code', 'is', null)
+    .neq('lot_code', '')
+
+  if (options?.excludeTransactionId) {
+    txQuery = txQuery.neq('id', options.excludeTransactionId)
+  }
+
   const [lotsRes, txRes] = await Promise.all([
     supabase.from('item_stock_lots').select('lot_code').eq('item_id', itemId).eq('user_id', userId),
-    supabase
-      .from('stock_transactions')
-      .select('lot_code')
-      .eq('item_id', itemId)
-      .eq('user_id', userId)
-      .not('lot_code', 'is', null)
-      .neq('lot_code', ''),
+    txQuery,
   ])
 
   for (const row of lotsRes.data ?? []) {
@@ -67,6 +74,28 @@ export function allocateUnitLotCodesForItem(
   count: number
 ): string[] {
   return allocateNextUnitLotCodes(itemBase.trim(), knownCodes, count)
+}
+
+/** 출고 이력 삭제 시: 이력에 남은 lot_code를 그대로 복구, 없으면 다음 번호 발급 */
+export function lotCodesForOutboundDeleteRestore(
+  txLotCode: string | null | undefined,
+  amount: number,
+  itemBase: string,
+  knownCodes: string[],
+): string[] {
+  const n = Math.max(0, Math.floor(amount) || 0)
+  if (n <= 0) return []
+
+  const fromTx = expandLotCodeField(txLotCode)
+  if (fromTx.length === 0) {
+    return allocateUnitLotCodesForItem(itemBase, knownCodes, n)
+  }
+
+  const primary = fromTx.slice(0, n)
+  if (primary.length >= n) return primary
+
+  const extra = allocateUnitLotCodesForItem(itemBase, [...knownCodes, ...primary], n - primary.length)
+  return [...primary, ...extra]
 }
 
 export function resolveSingleUnitLotCode(

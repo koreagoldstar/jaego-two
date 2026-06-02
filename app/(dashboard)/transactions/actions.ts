@@ -1,7 +1,11 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { allocateUnitLotCodesForItem, fetchAllKnownLotCodesForItem } from '@/lib/items/knownLotCodes'
+import {
+  expandLotCodeField,
+  fetchAllKnownLotCodesForItem,
+  lotCodesForOutboundDeleteRestore,
+} from '@/lib/items/knownLotCodes'
 import { deleteUnitLotsFifo } from '@/lib/items/stockLotFifo'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
@@ -108,7 +112,7 @@ export async function deleteStockTransactionAction(id: string) {
 
   const { data: tx, error: txError } = await supabase
     .from('stock_transactions')
-    .select('id, item_id, direction, amount')
+    .select('id, item_id, direction, amount, lot_code')
     .eq('id', id)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -126,14 +130,15 @@ export async function deleteStockTransactionAction(id: string) {
     if (itemError) return { ok: false as const, error: itemError.message }
     if (!item) return { ok: false as const, error: '품목을 찾을 수 없습니다' }
 
-    const { itemBase, knownCodes } = await fetchAllKnownLotCodesForItem(supabase, user.id, tx.item_id)
+    const { itemBase, knownCodes } = await fetchAllKnownLotCodesForItem(supabase, user.id, tx.item_id, {
+      excludeTransactionId: tx.id,
+    })
 
-    const { error: lotError } = await supabase
+    const { data: existingLots, error: lotError } = await supabase
       .from('item_stock_lots')
       .select('lot_code')
       .eq('item_id', tx.item_id)
       .eq('user_id', user.id)
-      .limit(1)
 
     if (lotError && !isMissingItemStockLotsTable(lotError)) {
       return { ok: false as const, error: lotError.message }
@@ -151,18 +156,31 @@ export async function deleteStockTransactionAction(id: string) {
         return { ok: false as const, error: `재고 되돌리기 실패: ${reverseError.message}` }
       }
     } else {
-      const codes = allocateUnitLotCodesForItem(itemBase, knownCodes, tx.amount)
-      const { error: insError } = await supabase.from('item_stock_lots').insert(
-        codes.map(code => ({
-          user_id: user.id,
-          item_id: tx.item_id,
-          quantity: 1,
-          lot_code: code,
-          note: '[이력삭제복구]',
-        })),
+      const existingSet = new Set(
+        (existingLots ?? [])
+          .map(row => (row.lot_code ?? '').trim().toLowerCase())
+          .filter(Boolean),
       )
-      if (insError) {
-        return { ok: false as const, error: `재고 되돌리기 실패: ${insError.message}` }
+
+      const codes = lotCodesForOutboundDeleteRestore(tx.lot_code, tx.amount, itemBase, knownCodes).filter(
+        code => !existingSet.has(code.trim().toLowerCase()),
+      )
+
+      if (codes.length > 0) {
+        const { error: insError } = await supabase.from('item_stock_lots').insert(
+          codes.map(code => ({
+            user_id: user.id,
+            item_id: tx.item_id,
+            quantity: 1,
+            lot_code: code,
+            note: '[이력삭제복구]',
+          })),
+        )
+        if (insError) {
+          return { ok: false as const, error: `재고 되돌리기 실패: ${insError.message}` }
+        }
+      } else if (expandLotCodeField(tx.lot_code).length === 0) {
+        return { ok: false as const, error: '복구할 QR 코드가 이력에 없습니다. 품목 상세에서 입고를 다시 해 주세요.' }
       }
     }
   } else {
@@ -181,6 +199,7 @@ export async function deleteStockTransactionAction(id: string) {
   revalidatePath('/transactions')
   revalidatePath('/items')
   revalidatePath('/stock-overview')
+  revalidatePath('/barcode')
   return { ok: true as const }
 }
 
