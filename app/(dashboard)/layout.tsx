@@ -13,7 +13,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f6f8] flex">
+    <div
+      className="min-h-screen flex bg-[#f5f6f8] bg-[url('/inventory-bg.png')] bg-cover bg-center bg-no-repeat bg-fixed bg-blend-overlay"
+    >
       <DesktopNav />
       <div className="flex-1 flex flex-col min-w-0">
         <main className="flex-1 max-w-lg mx-auto w-full px-4 pt-4 pb-24 md:pb-8 md:max-w-4xl">
