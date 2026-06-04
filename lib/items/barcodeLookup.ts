@@ -49,21 +49,48 @@ async function findItemIdByBarcodeCandidates(
   return null
 }
 
+async function findActiveLotByCode(
+  supabase: SupabaseClient,
+  userId: string,
+  itemId: string,
+  lotCode: string,
+): Promise<string | null> {
+  const trimmed = lotCode.trim()
+  if (!trimmed) return null
+
+  const { data: exact } = await supabase
+    .from('item_stock_lots')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('item_id', itemId)
+    .eq('lot_code', trimmed)
+    .limit(1)
+    .maybeSingle()
+  if (exact?.id) return exact.id
+
+  if (!/[%_]/.test(trimmed)) {
+    const { data: ilike } = await supabase
+      .from('item_stock_lots')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('item_id', itemId)
+      .ilike('lot_code', trimmed)
+      .limit(1)
+      .maybeSingle()
+    if (ilike?.id) return ilike.id
+  }
+
+  return null
+}
+
 async function wasUnitLotAlreadyShipped(
   supabase: SupabaseClient,
   userId: string,
   lotCode: string,
   itemId: string
 ): Promise<boolean> {
-  const { data: activeLot } = await supabase
-    .from('item_stock_lots')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('item_id', itemId)
-    .eq('lot_code', lotCode)
-    .limit(1)
-    .maybeSingle()
-  if (activeLot?.id) return false
+  const activeLotId = await findActiveLotByCode(supabase, userId, itemId, lotCode)
+  if (activeLotId) return false
 
   const { data: outs } = await supabase
     .from('stock_transactions')
@@ -76,11 +103,7 @@ async function wasUnitLotAlreadyShipped(
     .order('created_at', { ascending: false })
     .limit(200)
 
-  if ((outs ?? []).some(row => lotCodeListedInField(row.lot_code, lotCode))) {
-    return true
-  }
-
-  return parseUnitSuffixIndex(lotCode) !== null
+  return (outs ?? []).some(row => lotCodeListedInField(row.lot_code, lotCode))
 }
 
 /** 사용자 품목 중 스캔 문자열로 품목·입고 단위 조회 */
@@ -109,6 +132,18 @@ export async function findItemByBarcode(
       .maybeSingle()
     if (!lotError && byLot?.item_id) {
       return { itemId: byLot.item_id, lotId: byLot.id ?? null }
+    }
+    if (!lotError && !/[%_]/.test(candidate)) {
+      const { data: byLotIlike } = await supabase
+        .from('item_stock_lots')
+        .select('item_id, id')
+        .eq('user_id', userId)
+        .ilike('lot_code', candidate)
+        .limit(1)
+        .maybeSingle()
+      if (byLotIlike?.item_id) {
+        return { itemId: byLotIlike.item_id, lotId: byLotIlike.id ?? null }
+      }
     }
   }
 
@@ -139,6 +174,16 @@ export async function findItemByBarcode(
     const shipped = await wasUnitLotAlreadyShipped(supabase, userId, code, itemId)
     if (shipped) {
       return { itemId, lotId: null, alreadyShipped: true }
+    }
+
+    const { data: itemRow } = await supabase
+      .from('items')
+      .select('quantity')
+      .eq('id', itemId)
+      .eq('user_id', userId)
+      .maybeSingle()
+    if ((itemRow?.quantity ?? 0) > 0) {
+      return { itemId, lotId: null }
     }
     return null
   }
