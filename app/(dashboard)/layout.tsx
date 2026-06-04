@@ -17,7 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       className="min-h-screen flex bg-[#eef2f7] bg-cover bg-center bg-no-repeat bg-fixed"
       style={{
         backgroundImage:
-          "linear-gradient(rgba(238,242,247,0.55), rgba(238,242,247,0.55)), url('/inventory-bg.png')",
+          "linear-gradient(rgba(238,242,247,0.32), rgba(238,242,247,0.32)), url('/inventory-bg.png')",
       }}
     >
       <DesktopNav />
