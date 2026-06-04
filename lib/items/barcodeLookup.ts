@@ -17,11 +17,15 @@ function parseLegacyBundledLotIndex(code: string): { base: string; index: number
 export type BarcodeLookupResult = {
   itemId: string
   lotId: string | null
-  /** 재고(lot)에 없고 단위 QR(-001 등)만 스캔된 경우 */
+  /** 출고 이력에 있고 현재 재고 lot에 없음 */
   alreadyShipped?: boolean
+  /** 단위 QR인데 현재 재고 lot에 해당 코드 없음 (다른 번호만 남음) */
+  unitNotInStock?: boolean
 }
 
 export const ALREADY_SHIPPED_MESSAGE = '이미 출고된 제품입니다.'
+export const UNIT_NOT_IN_STOCK_MESSAGE =
+  '현재 재고에 없는 단위 QR입니다. 이미 출고됐거나 라벨 번호가 DB와 다를 수 있습니다.'
 
 function lotCodeListedInField(field: string | null | undefined, lotCode: string): boolean {
   const target = lotCode.trim().toLowerCase()
@@ -101,7 +105,7 @@ async function wasUnitLotAlreadyShipped(
     .not('lot_code', 'is', null)
     .neq('lot_code', '')
     .order('created_at', { ascending: false })
-    .limit(200)
+    .limit(2000)
 
   return (outs ?? []).some(row => lotCodeListedInField(row.lot_code, lotCode))
 }
@@ -171,21 +175,17 @@ export async function findItemByBarcode(
     ])
     if (!itemId) return null
 
+    const activeLotId = await findActiveLotByCode(supabase, userId, itemId, code)
+    if (activeLotId) {
+      return { itemId, lotId: activeLotId }
+    }
+
     const shipped = await wasUnitLotAlreadyShipped(supabase, userId, code, itemId)
     if (shipped) {
       return { itemId, lotId: null, alreadyShipped: true }
     }
 
-    const { data: itemRow } = await supabase
-      .from('items')
-      .select('quantity')
-      .eq('id', itemId)
-      .eq('user_id', userId)
-      .maybeSingle()
-    if ((itemRow?.quantity ?? 0) > 0) {
-      return { itemId, lotId: null }
-    }
-    return null
+    return { itemId, lotId: null, unitNotInStock: true }
   }
 
   const itemId = await findItemIdByBarcodeCandidates(supabase, userId, itemBarcodeCandidates)

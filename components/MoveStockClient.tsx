@@ -3,7 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ALREADY_SHIPPED_MESSAGE, findItemByBarcode } from '@/lib/items/barcodeLookup'
+import {
+  ALREADY_SHIPPED_MESSAGE,
+  UNIT_NOT_IN_STOCK_MESSAGE,
+  findItemByBarcode,
+} from '@/lib/items/barcodeLookup'
+import { parseUnitSuffixIndex } from '@/lib/items/lotCodes'
+import {
+  DUPLICATE_UNIT_SCAN_MESSAGE,
+  markRecentlyOutboundScanned,
+  wasRecentlyOutboundScanned,
+} from '@/lib/items/recentUnitScan'
 import { buildStockUnitOptions, formatStockUnitLabel, type StockUnitOption } from '@/lib/items/stockUnits'
 import type { Item, ItemStockLot } from '@/lib/supabase/types'
 import { StockUnitPicker } from '@/components/stock/StockUnitPicker'
@@ -38,6 +48,7 @@ export function MoveStockClient() {
     lotId: string | null
   } | null>(null)
   const [outConfirmPending, setOutConfirmPending] = useState(false)
+  const [activeUnitScanCode, setActiveUnitScanCode] = useState<string | null>(null)
   const [showPicker, setShowPicker] = useState(false)
 
   const resolveRef = useRef<(code: string) => Promise<void>>(async () => {})
@@ -164,22 +175,33 @@ export function MoveStockClient() {
       setMsg({ type: 'err', text: '이전 스캔을 먼저 확인/취소하세요.' })
       return
     }
-    const trimmed = code.trim()
-    if (!trimmed) return
+      const trimmed = code.trim()
+      if (!trimmed) return
 
-    const supabase = createClient()
+      if (wasRecentlyOutboundScanned(trimmed)) {
+        window.alert(DUPLICATE_UNIT_SCAN_MESSAGE)
+        setMsg({ type: 'err', text: DUPLICATE_UNIT_SCAN_MESSAGE })
+        return
+      }
+
+      const supabase = createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return
 
     const hit = await findItemByBarcode(supabase, user.id, trimmed)
-    if (hit?.alreadyShipped) {
-      window.alert(ALREADY_SHIPPED_MESSAGE)
-      setMsg({ type: 'err', text: ALREADY_SHIPPED_MESSAGE })
-      return
-    }
-    if (hit) {
+      if (hit?.alreadyShipped) {
+        window.alert(ALREADY_SHIPPED_MESSAGE)
+        setMsg({ type: 'err', text: ALREADY_SHIPPED_MESSAGE })
+        return
+      }
+      if (hit?.unitNotInStock) {
+        window.alert(UNIT_NOT_IN_STOCK_MESSAGE)
+        setMsg({ type: 'err', text: UNIT_NOT_IN_STOCK_MESSAGE })
+        return
+      }
+      if (hit) {
       const { itemId: id, lotId } = hit
       const selectedProject = project.trim()
       if (selectedProject) {
@@ -195,6 +217,7 @@ export function MoveStockClient() {
         }
       }
       const item = items.find(i => i.id === id)
+      setActiveUnitScanCode(parseUnitSuffixIndex(trimmed) !== null ? trimmed : null)
       setPendingScan({ code: trimmed, itemId: id, itemName: item?.name ?? '품목', lotId })
       return
     }
@@ -259,6 +282,9 @@ export function MoveStockClient() {
     if (!pendingScan) return
     setSelectedId(pendingScan.itemId)
     if (pendingScan.lotId) setSelectedLotId(pendingScan.lotId)
+    setActiveUnitScanCode(
+      parseUnitSuffixIndex(pendingScan.code) !== null ? pendingScan.code : null,
+    )
     setScanLine(`스캔 확인: ${pendingScan.code}`)
     setLastScanAt(new Date().toISOString())
     setScanCount(prev => prev + 1)
@@ -293,6 +319,13 @@ export function MoveStockClient() {
       setMsg({ type: 'err', text: '스캔으로 품목을 먼저 선택하세요.' })
       return
     }
+    if (direction === 'in' && activeUnitScanCode) {
+      setMsg({
+        type: 'err',
+        text: '단위 QR(-001 등)은 입고가 아닙니다. 출고만 사용하거나 품목 QR(접두 코드)로 입고하세요.',
+      })
+      return
+    }
     if (direction === 'out' && outBlockedByRemaining) {
       setMsg({ type: 'err', text: '프로젝트 예정 잔여가 0 이하라 출고할 수 없습니다.' })
       return
@@ -323,10 +356,13 @@ export function MoveStockClient() {
         setNote('')
         setAmount(1)
         if (direction === 'out') {
+          if (activeUnitScanCode?.trim()) markRecentlyOutboundScanned(activeUnitScanCode)
           setOutConfirmPending(false)
           setSelectedId('')
           setSelectedLotId('')
+          setActiveUnitScanCode(null)
           setScanLine(null)
+          setPendingScan(null)
         }
         await load()
       }
@@ -410,6 +446,7 @@ export function MoveStockClient() {
               onClick={() => {
                 setSelectedId('')
                 setSelectedLotId('')
+                setActiveUnitScanCode(null)
                 setScanLine(null)
                 setMsg(null)
                 setOutConfirmPending(false)

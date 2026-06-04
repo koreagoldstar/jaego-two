@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { ALREADY_SHIPPED_MESSAGE, findItemByBarcode } from '@/lib/items/barcodeLookup'
+import {
+  ALREADY_SHIPPED_MESSAGE,
+  UNIT_NOT_IN_STOCK_MESSAGE,
+  findItemByBarcode,
+} from '@/lib/items/barcodeLookup'
+import { parseUnitSuffixIndex } from '@/lib/items/lotCodes'
+import {
+  DUPLICATE_UNIT_SCAN_MESSAGE,
+  markRecentlyOutboundScanned,
+  wasRecentlyOutboundScanned,
+} from '@/lib/items/recentUnitScan'
 import type { Item } from '@/lib/supabase/types'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
 import { Loader2, Trash2 } from 'lucide-react'
@@ -10,6 +20,7 @@ import { Loader2, Trash2 } from 'lucide-react'
 type ScanBucket = {
   item: Item
   count: number
+  codes: string[]
 }
 
 export function BulkOutClient() {
@@ -75,6 +86,12 @@ export function BulkOutClient() {
       const trimmed = code.trim()
       if (!trimmed) return
 
+      if (wasRecentlyOutboundScanned(trimmed)) {
+        window.alert(DUPLICATE_UNIT_SCAN_MESSAGE)
+        setMsg({ type: 'err', text: DUPLICATE_UNIT_SCAN_MESSAGE })
+        return
+      }
+
       const supabase = createClient()
       const {
         data: { user },
@@ -85,6 +102,11 @@ export function BulkOutClient() {
       if (hit?.alreadyShipped) {
         window.alert(ALREADY_SHIPPED_MESSAGE)
         setMsg({ type: 'err', text: ALREADY_SHIPPED_MESSAGE })
+        return
+      }
+      if (hit?.unitNotInStock) {
+        window.alert(UNIT_NOT_IN_STOCK_MESSAGE)
+        setMsg({ type: 'err', text: UNIT_NOT_IN_STOCK_MESSAGE })
         return
       }
       if (!hit) {
@@ -142,12 +164,21 @@ export function BulkOutClient() {
 
   function confirmPendingScan() {
     if (!pendingScan) return
+    const codeKey = pendingScan.code.trim().toLowerCase()
     setBucket(prev => {
       const current = prev[pendingScan.itemId]
       const item = current?.item ?? items.find(i => i.id === pendingScan.itemId)
       if (!item) return prev
+      const codes = current?.codes ?? []
+      if (codeKey && codes.some(c => c.toLowerCase() === codeKey)) {
+        setMsg({ type: 'err', text: '이미 스캔 목록에 있는 QR입니다.' })
+        return prev
+      }
       const nextCount = (current?.count ?? 0) + 1
-      return { ...prev, [pendingScan.itemId]: { item, count: nextCount } }
+      return {
+        ...prev,
+        [pendingScan.itemId]: { item, count: nextCount, codes: [...codes, pendingScan.code.trim()] },
+      }
     })
     setScanLine(`${pendingScan.itemName} 스캔 +1`)
     setLastScanAt(new Date().toISOString())
@@ -165,7 +196,7 @@ export function BulkOutClient() {
         delete next[itemId]
         return next
       }
-      return { ...prev, [itemId]: { ...row, count } }
+      return { ...prev, [itemId]: { ...row, count, codes: row.codes.slice(0, count) } }
     })
   }, [])
 
@@ -220,6 +251,9 @@ export function BulkOutClient() {
           failed.push(`${row.item.name} (${error.message})`)
         } else {
           okCount++
+          for (const c of row.codes) {
+            if (parseUnitSuffixIndex(c) !== null) markRecentlyOutboundScanned(c)
+          }
         }
       }
 

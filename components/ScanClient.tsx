@@ -3,7 +3,11 @@
 import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ALREADY_SHIPPED_MESSAGE, findItemByBarcode } from '@/lib/items/barcodeLookup'
+import {
+  ALREADY_SHIPPED_MESSAGE,
+  UNIT_NOT_IN_STOCK_MESSAGE,
+  findItemByBarcode,
+} from '@/lib/items/barcodeLookup'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
 
 export function ScanClient() {
@@ -23,6 +27,11 @@ export function ScanClient() {
       if (hit?.alreadyShipped) {
         window.alert(ALREADY_SHIPPED_MESSAGE)
         setHint(ALREADY_SHIPPED_MESSAGE)
+        return
+      }
+      if (hit?.unitNotInStock) {
+        window.alert(UNIT_NOT_IN_STOCK_MESSAGE)
+        setHint(UNIT_NOT_IN_STOCK_MESSAGE)
         return
       }
       if (hit) {
