@@ -148,7 +148,8 @@ async function findSingleActiveLotForItem(
     .eq('user_id', userId)
     .eq('item_id', itemId)
     .gt('quantity', 0)
-  if ((lots ?? []).length === 1) return lots[0].id ?? null
+  const rows = lots ?? []
+  if (rows.length === 1) return rows[0].id ?? null
   return null
 }
 
