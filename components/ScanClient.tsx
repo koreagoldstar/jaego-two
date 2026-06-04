@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   ALREADY_SHIPPED_MESSAGE,
   UNIT_NOT_IN_STOCK_MESSAGE,
+  UNIT_QR_MISMATCH_MESSAGE,
   findItemByBarcode,
 } from '@/lib/items/barcodeLookup'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
@@ -33,6 +34,9 @@ export function ScanClient() {
         window.alert(UNIT_NOT_IN_STOCK_MESSAGE)
         setHint(UNIT_NOT_IN_STOCK_MESSAGE)
         return
+      }
+      if (hit?.unitMismatch) {
+        setHint(UNIT_QR_MISMATCH_MESSAGE)
       }
       if (hit) {
         const q = hit.lotId ? `&lot=${hit.lotId}` : ''

@@ -19,13 +19,17 @@ export type BarcodeLookupResult = {
   lotId: string | null
   /** 출고 이력에 있고 현재 재고 lot에 없음 */
   alreadyShipped?: boolean
-  /** 단위 QR인데 현재 재고 lot에 해당 코드 없음 (다른 번호만 남음) */
+  /** 단위 QR 문자열과 DB lot_code 불일치 — 재고는 있음, 단위 선택 필요 */
+  unitMismatch?: boolean
+  /** 재고 lot 없음(수량 0) */
   unitNotInStock?: boolean
 }
 
 export const ALREADY_SHIPPED_MESSAGE = '이미 출고된 제품입니다.'
 export const UNIT_NOT_IN_STOCK_MESSAGE =
   '현재 재고에 없는 단위 QR입니다. 이미 출고됐거나 라벨 번호가 DB와 다를 수 있습니다.'
+export const UNIT_QR_MISMATCH_MESSAGE =
+  '라벨 QR과 DB 등록 코드가 다릅니다. 아래에서 출고할 단위를 선택한 뒤 출고하세요.'
 
 function lotCodeListedInField(field: string | null | undefined, lotCode: string): boolean {
   const target = lotCode.trim().toLowerCase()
@@ -68,6 +72,7 @@ async function findActiveLotByCode(
     .eq('user_id', userId)
     .eq('item_id', itemId)
     .eq('lot_code', trimmed)
+    .gt('quantity', 0)
     .limit(1)
     .maybeSingle()
   if (exact?.id) return exact.id
@@ -79,6 +84,7 @@ async function findActiveLotByCode(
       .eq('user_id', userId)
       .eq('item_id', itemId)
       .ilike('lot_code', trimmed)
+      .gt('quantity', 0)
       .limit(1)
       .maybeSingle()
     if (ilike?.id) return ilike.id
@@ -110,6 +116,42 @@ async function wasUnitLotAlreadyShipped(
   return (outs ?? []).some(row => lotCodeListedInField(row.lot_code, lotCode))
 }
 
+/** 품목 내 lot_code 끝 번호(-003)가 스캔 번호와 같은 재고 1건 */
+async function findActiveLotBySuffixIndex(
+  supabase: SupabaseClient,
+  userId: string,
+  itemId: string,
+  suffixIndex: number,
+): Promise<string | null> {
+  const { data: lots } = await supabase
+    .from('item_stock_lots')
+    .select('id, lot_code')
+    .eq('user_id', userId)
+    .eq('item_id', itemId)
+    .gt('quantity', 0)
+
+  const matches = (lots ?? []).filter(
+    row => parseUnitSuffixIndex((row.lot_code ?? '').trim()) === suffixIndex,
+  )
+  if (matches.length === 1) return matches[0].id ?? null
+  return null
+}
+
+async function findSingleActiveLotForItem(
+  supabase: SupabaseClient,
+  userId: string,
+  itemId: string,
+): Promise<string | null> {
+  const { data: lots } = await supabase
+    .from('item_stock_lots')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('item_id', itemId)
+    .gt('quantity', 0)
+  if ((lots ?? []).length === 1) return lots[0].id ?? null
+  return null
+}
+
 /** 사용자 품목 중 스캔 문자열로 품목·입고 단위 조회 */
 export async function findItemByBarcode(
   supabase: SupabaseClient,
@@ -132,6 +174,7 @@ export async function findItemByBarcode(
       .select('item_id, id')
       .eq('user_id', userId)
       .eq('lot_code', candidate)
+      .gt('quantity', 0)
       .limit(1)
       .maybeSingle()
     if (!lotError && byLot?.item_id) {
@@ -143,6 +186,7 @@ export async function findItemByBarcode(
         .select('item_id, id')
         .eq('user_id', userId)
         .ilike('lot_code', candidate)
+        .gt('quantity', 0)
         .limit(1)
         .maybeSingle()
       if (byLotIlike?.item_id) {
@@ -183,6 +227,27 @@ export async function findItemByBarcode(
     const shipped = await wasUnitLotAlreadyShipped(supabase, userId, code, itemId)
     if (shipped) {
       return { itemId, lotId: null, alreadyShipped: true }
+    }
+
+    const suffixIndex = parseUnitSuffixIndex(code)
+    if (suffixIndex !== null) {
+      const bySuffix = await findActiveLotBySuffixIndex(supabase, userId, itemId, suffixIndex)
+      if (bySuffix) return { itemId, lotId: bySuffix }
+    }
+
+    const onlyLot = await findSingleActiveLotForItem(supabase, userId, itemId)
+    if (onlyLot) return { itemId, lotId: onlyLot }
+
+    const { data: lots } = await supabase
+      .from('item_stock_lots')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('item_id', itemId)
+      .gt('quantity', 0)
+      .limit(1)
+
+    if ((lots ?? []).length > 0) {
+      return { itemId, lotId: null, unitMismatch: true }
     }
 
     return { itemId, lotId: null, unitNotInStock: true }

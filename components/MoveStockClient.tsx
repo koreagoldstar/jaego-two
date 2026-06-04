@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   ALREADY_SHIPPED_MESSAGE,
   UNIT_NOT_IN_STOCK_MESSAGE,
+  UNIT_QR_MISMATCH_MESSAGE,
   findItemByBarcode,
 } from '@/lib/items/barcodeLookup'
 import { parseUnitSuffixIndex } from '@/lib/items/lotCodes'
@@ -200,6 +201,9 @@ export function MoveStockClient() {
         window.alert(UNIT_NOT_IN_STOCK_MESSAGE)
         setMsg({ type: 'err', text: UNIT_NOT_IN_STOCK_MESSAGE })
         return
+      }
+      if (hit?.unitMismatch) {
+        setMsg({ type: 'err', text: UNIT_QR_MISMATCH_MESSAGE })
       }
       if (hit) {
       const { itemId: id, lotId } = hit
