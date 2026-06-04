@@ -320,11 +320,15 @@ export function MoveStockClient() {
       return
     }
     if (direction === 'in' && activeUnitScanCode) {
-      setMsg({
-        type: 'err',
-        text: '단위 QR(-001 등)은 입고가 아닙니다. 출고만 사용하거나 품목 QR(접두 코드)로 입고하세요.',
-      })
-      return
+      const ok = window.confirm(
+        `단위 QR(${activeUnitScanCode})는 출고용입니다.\n\n` +
+          '입고하면 이 품목 기준으로 새 단위 번호(예: -006)가 생성됩니다.\n' +
+          '출고한 그 번호(-001) 그대로 되돌리려면 거래 이력에서 출고를 삭제하세요.\n\n' +
+          '품목 기준 입고를 진행할까요?',
+      )
+      if (!ok) return
+      setActiveUnitScanCode(null)
+      setSelectedLotId('')
     }
     if (direction === 'out' && outBlockedByRemaining) {
       setMsg({ type: 'err', text: '프로젝트 예정 잔여가 0 이하라 출고할 수 없습니다.' })
@@ -647,6 +651,11 @@ export function MoveStockClient() {
         </div>
       )}
 
+      <p className="text-xs text-slate-500 leading-relaxed px-1">
+        <span className="font-medium text-slate-700">반품·재입고:</span> 출고 이력 삭제 시 예전 QR이 복구됩니다.
+        이력 없이 넣으려면 품목 선택 후 <span className="font-medium">입고</span>(새 -00N 생성) 또는
+        품목 QR(뒤에 번호 없음)만 스캔하세요.
+      </p>
       <div className="grid grid-cols-2 gap-3 pt-1">
         <button
           type="button"
