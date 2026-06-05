@@ -69,12 +69,35 @@ const LABEL_PRESETS: LabelPreset[] = [
   { key: '100x50', label: '100 × 50mm', widthMm: 100, heightMm: 50 },
 ]
 
+type CodeFormat = 'CODE128' | 'CODE39' | 'QR'
+type PrintTextMode = 'normal' | 'compact' | 'compact-with-text' | 'micro-qr'
+
+/** 40×20mm 등 초소형 QR 라벨 (가로 배치) */
+function isMicroQrLabel(widthMm: number, heightMm: number, format: CodeFormat): boolean {
+  return format === 'QR' && heightMm <= 22 && widthMm <= 50
+}
+
+function computeMicroQrLayout(widthMm: number, heightMm: number, hasText: boolean) {
+  const padMm = 0.6
+  const innerH = heightMm - padMm * 2
+  const innerW = widthMm - padMm * 2
+  if (!hasText) {
+    const qrSideMm = Math.min(innerH, innerW)
+    return { padMm, qrSideMm, layout: 'center' as const }
+  }
+  const textColMm = Math.min(Math.max(9, innerW * 0.4), innerW - 9)
+  const qrSideMm = Math.min(innerH, innerW - textColMm - 0.35)
+  return { padMm, qrSideMm, textColMm, layout: 'horizontal' as const }
+}
+
 /** 본문(캡션·하단 코드 문자열) 공간을 빼고 QR/바코드가 들어갈 높이(mm) */
 function labelBarcodeMaxHeightMm(
   heightMm: number,
-  textMode: 'normal' | 'compact' | 'compact-with-text' = 'normal',
+  textMode: PrintTextMode = 'normal',
   isQr: boolean = false,
+  qrSideOverrideMm?: number,
 ): number {
+  if (textMode === 'micro-qr' && qrSideOverrideMm) return qrSideOverrideMm
   const pad = 1.2
   const textReserve = isQr
     ? textMode === 'compact' || textMode === 'compact-with-text'
@@ -130,8 +153,61 @@ function buildPrintIframeStyles(
   barcodeMaxMm: number,
   compact: boolean,
   isQr: boolean = false,
+  microQrSideMm?: number,
 ): string {
-  const pad = 1.2
+  const pad = microQrSideMm ? 0.6 : 1.2
+  const microCss =
+    microQrSideMm != null
+      ? `
+      .label-micro {
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        padding: ${pad}mm;
+        gap: 0.35mm;
+        overflow: hidden;
+      }
+      .label-micro-center {
+        justify-content: center;
+      }
+      .barcode-wrap-micro {
+        flex: 0 0 ${microQrSideMm}mm;
+        width: ${microQrSideMm}mm;
+        height: ${microQrSideMm}mm;
+        max-width: ${microQrSideMm}mm;
+        max-height: ${microQrSideMm}mm;
+        overflow: hidden;
+      }
+      .barcode-wrap-micro .barcode {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+      .label-text-col {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.15mm;
+        overflow: hidden;
+      }
+      .label-text-col .caption,
+      .label-text-col .meta {
+        font-size: 3.2pt;
+        line-height: 1.08;
+        text-align: left;
+        white-space: normal;
+        word-break: break-all;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+      }
+    `
+      : ''
   return `
       @page {
         size: ${widthMm}mm ${heightMm}mm;
@@ -234,6 +310,7 @@ function buildPrintIframeStyles(
       .barcode-crisp {
         image-rendering: crisp-edges;
       }
+      ${microCss}
       @media print {
         @page {
           size: ${widthMm}mm ${heightMm}mm;
@@ -301,8 +378,6 @@ function qrCodeDisplayLine(payload: string): string {
   return p ? `QR 코드: ${p}` : ''
 }
 
-type CodeFormat = 'CODE128' | 'CODE39' | 'QR'
-
 function oneDModuleWidth(format: CodeFormat): number {
   return format === 'CODE39' ? 3 : 2
 }
@@ -313,6 +388,7 @@ function BarcodeStrip({
   caption,
   metaLines = [],
   showEncodingLine = true,
+  paperWidthMm = 58,
   paperHeightMm = 40,
 }: {
   payload: string
@@ -320,11 +396,18 @@ function BarcodeStrip({
   caption?: string
   metaLines?: string[]
   showEncodingLine?: boolean
+  paperWidthMm?: number
   paperHeightMm?: number
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
+  const microQr = isMicroQrLabel(paperWidthMm, paperHeightMm, format)
   const compactLabel = paperHeightMm <= 24
+  const microLayout = microQr ? computeMicroQrLayout(paperWidthMm, paperHeightMm, !!(caption || metaLines.length)) : null
+  const qrPreviewPx = microQr
+    ? Math.max(72, Math.round((microLayout?.qrSideMm ?? paperHeightMm - 1.2) * 4))
+    : Math.min(280, Math.max(96, Math.round(paperHeightMm * 6)))
   const barcodeHeight = compactLabel ? 34 : Math.max(46, Math.floor(paperHeightMm * 2.8))
+  const showEncoding = showEncodingLine && !microQr
   const normalizedMeta =
     compactLabel && metaLines.length > 0
       ? [metaLines.join(' / ')]
@@ -338,10 +421,9 @@ function BarcodeStrip({
     if (format === 'QR') {
       const ctx = canvas.getContext('2d')
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
-      const side = Math.min(280, Math.max(96, Math.round(paperHeightMm * 6)))
       void QRCode.toCanvas(canvas, p, {
-        width: side,
-        margin: 2,
+        width: qrPreviewPx,
+        margin: microQr ? 0 : 2,
         errorCorrectionLevel: 'M',
         color: { dark: '#000000', light: '#ffffff' },
       }).catch(() => {})
@@ -381,46 +463,78 @@ function BarcodeStrip({
     } catch {
       /* invalid */
     }
-  }, [payload, format, barcodeHeight, compactLabel, paperHeightMm])
+  }, [payload, format, barcodeHeight, compactLabel, paperHeightMm, microQr, qrPreviewPx])
+
+  const captionBlock = caption ? (
+    <p
+      className={`font-medium text-slate-700 px-1 ${
+        microQr ? 'text-[10px] leading-tight break-all' : 'text-xs print:text-[7pt] text-center max-w-full truncate'
+      }`}
+    >
+      {caption}
+    </p>
+  ) : null
+
+  const metaBlock =
+    normalizedMeta.length > 0 ? (
+      <div
+        className={`text-slate-600 leading-tight px-1 space-y-0.5 ${
+          microQr ? 'text-[10px]' : 'text-[11px] print:text-[6.5pt] text-center'
+        }`}
+      >
+        {normalizedMeta.map(line => (
+          <p key={line} className="break-all">
+            {line}
+          </p>
+        ))}
+      </div>
+    ) : null
 
   return (
     <div
-      className="barcode-print-label flex flex-col items-center justify-center gap-1 border-b border-slate-100 last:border-0 print:break-inside-avoid"
+      className={`barcode-print-label border-b border-slate-100 last:border-0 print:break-inside-avoid ${
+        microQr ? 'flex flex-row items-center gap-2' : 'flex flex-col items-center justify-center gap-1'
+      }`}
       style={{
         width: '100%',
-        minHeight: '180px',
-        padding: '10px',
+        minHeight: microQr ? '88px' : '180px',
+        padding: microQr ? '8px' : '10px',
       }}
     >
-      {caption && (
-        <p className="text-xs print:text-[7pt] font-medium text-slate-700 text-center max-w-full truncate px-1">{caption}</p>
+      {microQr ? (
+        <>
+          <canvas
+            ref={ref}
+            className="shrink-0"
+            style={{ width: `${qrPreviewPx}px`, height: `${qrPreviewPx}px` }}
+          />
+          {(captionBlock || metaBlock) && (
+            <div className="min-w-0 flex-1 flex flex-col justify-center gap-0.5">{captionBlock}{metaBlock}</div>
+          )}
+        </>
+      ) : (
+        <>
+          {captionBlock}
+          {metaBlock}
+          <canvas
+            ref={ref}
+            className="max-w-full h-auto"
+            style={
+              format === 'QR'
+                ? {
+                    width: `${qrPreviewPx}px`,
+                    height: `${qrPreviewPx}px`,
+                    maxHeight: 'min(40vh, 280px)',
+                  }
+                : {
+                    width: 'min(96%, 560px)',
+                    maxHeight: compactLabel ? '84px' : '130px',
+                  }
+            }
+          />
+        </>
       )}
-      {normalizedMeta.length > 0 && (
-        <div className="text-[11px] print:text-[6.5pt] text-slate-600 text-center leading-tight px-1 space-y-0.5">
-          {normalizedMeta.map(line => (
-            <p key={line} className="break-all">
-              {line}
-            </p>
-          ))}
-        </div>
-      )}
-      <canvas
-        ref={ref}
-        className="max-w-full h-auto"
-        style={
-          format === 'QR'
-            ? {
-                width: `${Math.min(280, Math.max(96, Math.round(paperHeightMm * 6)))}px`,
-                height: `${Math.min(280, Math.max(96, Math.round(paperHeightMm * 6)))}px`,
-                maxHeight: 'min(40vh, 280px)',
-              }
-            : {
-                width: 'min(96%, 560px)',
-                maxHeight: compactLabel ? '84px' : '130px',
-              }
-        }
-      />
-      {(showEncodingLine || format === 'QR') && normalizeBarcodePayload(payload) && (
+      {showEncoding && normalizeBarcodePayload(payload) && (
         <div className="text-[11px] print:text-[6.5pt] text-slate-700 text-center px-1 max-w-full">
           <p className="break-all font-mono leading-tight">
             {format === 'QR'
@@ -647,23 +761,29 @@ export function BarcodePanel() {
       payload: string,
       labelWidthMm: number,
       labelHeightMm: number,
-      textMode: 'normal' | 'compact' | 'compact-with-text' = 'normal'
+      textMode: PrintTextMode = 'normal',
+      qrSideMmOverride?: number,
     ): Promise<string | null> => {
       const clean = normalizeBarcodePayload(payload)
       if (!clean) return null
 
-      const padMm = 1.2
-      const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm, textMode, format === 'QR')
+      const padMm = textMode === 'micro-qr' ? 0.6 : 1.2
+      const barcodeMaxMm = labelBarcodeMaxHeightMm(
+        labelHeightMm,
+        textMode,
+        format === 'QR',
+        qrSideMmOverride,
+      )
       const maxWPx = Math.max(64, Math.round((labelWidthMm - padMm * 2) * DPMM_203))
       const maxHPx = Math.max(40, Math.round(barcodeMaxMm * DPMM_203))
 
       if (format === 'QR') {
-        const side = Math.max(128, Math.round(Math.min(maxWPx, maxHPx)))
+        const side = Math.max(96, Math.round(qrSideMmOverride ? qrSideMmOverride * DPMM_203 : Math.min(maxWPx, maxHPx)))
         try {
           return await QRCode.toDataURL(clean, {
             width: side,
-            margin: textMode === 'compact' ? 1 : 2,
-            errorCorrectionLevel: 'H',
+            margin: textMode === 'micro-qr' ? 0 : textMode === 'compact' ? 1 : 2,
+            errorCorrectionLevel: textMode === 'micro-qr' ? 'M' : 'H',
             color: { dark: '#000000', light: '#ffffff' },
           })
         } catch {
@@ -768,16 +888,17 @@ export function BarcodePanel() {
   )
   const wMm = paperPreset.widthMm
   const hMm = paperPreset.heightMm
-  const printBarcodeMaxHeightMm = useMemo(
-    () => labelBarcodeMaxHeightMm(hMm, hMm <= 24 ? 'compact-with-text' : 'normal', format === 'QR'),
-    [hMm, format]
-  )
+  const microQrPrint = format === 'QR' && isMicroQrLabel(wMm, hMm, format)
+  const printBarcodeMaxHeightMm = useMemo(() => {
+    if (microQrPrint) return computeMicroQrLayout(wMm, hMm, true).qrSideMm
+    return labelBarcodeMaxHeightMm(hMm, hMm <= 24 ? 'compact-with-text' : 'normal', format === 'QR')
+  }, [hMm, wMm, format, microQrPrint])
 
   async function printBarcode() {
     if (mode === 'manual' && !manualPayload) return
     if (mode === 'items' && validItemRows.length === 0) return
 
-    const compactPrint = hMm <= 24
+    const compactPrint = hMm <= 24 && !microQrPrint
     const labels =
       mode === 'manual'
         ? [
@@ -795,27 +916,49 @@ export function BarcodePanel() {
 
     const parts: string[] = []
     for (const label of labels) {
+      const hasText = !!(label.caption || label.metaLines.length)
+      const microLayout = microQrPrint ? computeMicroQrLayout(wMm, hMm, hasText) : null
+      const textMode: PrintTextMode = microQrPrint ? 'micro-qr' : compactPrint ? 'compact-with-text' : 'normal'
       const dataUrl = await drawToDataUrlForPrint(
         label.payload,
         wMm,
         hMm,
-        compactPrint ? 'compact-with-text' : 'normal'
+        textMode,
+        microLayout?.qrSideMm,
       )
       if (!dataUrl) continue
       const captionHtml = label.caption ? `<p class="caption">${escapeHtml(label.caption)}</p>` : ''
       const metaHtml = label.metaLines.map(line => `<p class="meta">${escapeHtml(line)}</p>`).join('')
-      const codeLine = qrCodeDisplayLine(label.payload)
+      const codeLine = microQrPrint ? '' : qrCodeDisplayLine(label.payload)
       const encodingHtml = codeLine ? `<p class="encoding">${escapeHtml(codeLine)}</p>` : ''
-      parts.push(`
+      const imgClass = `barcode${format !== 'QR' ? ' barcode-crisp' : ''}`
+
+      if (microQrPrint && microLayout) {
+        const textCol =
+          hasText && microLayout.layout === 'horizontal'
+            ? `<div class="label-text-col">${captionHtml}${metaHtml}</div>`
+            : ''
+        const centerClass = microLayout.layout === 'center' ? ' label-micro-center' : ''
+        parts.push(`
+          <section class="label label-micro${centerClass}">
+            <div class="barcode-wrap barcode-wrap-micro">
+              <img class="${imgClass}" src="${dataUrl}" alt="" />
+            </div>
+            ${textCol}
+          </section>
+        `)
+      } else {
+        parts.push(`
           <section class="label">
             ${captionHtml}
             ${metaHtml}
             <div class="barcode-wrap">
-              <img class="barcode${format !== 'QR' ? ' barcode-crisp' : ''}" src="${dataUrl}" alt="" />
+              <img class="${imgClass}" src="${dataUrl}" alt="" />
             </div>
             ${encodingHtml}
           </section>
         `)
+      }
     }
     const htmlLabels = parts.join('')
 
@@ -849,7 +992,7 @@ export function BarcodePanel() {
   <head>
     <meta charset="utf-8" />
     <title>Barcode</title>
-    <style>${buildPrintIframeStyles(wMm, hMm, printBarcodeMaxHeightMm, compactPrint, format === 'QR')}</style>
+    <style>${buildPrintIframeStyles(wMm, hMm, printBarcodeMaxHeightMm, compactPrint, format === 'QR', microQrPrint ? printBarcodeMaxHeightMm : undefined)}</style>
   </head>
   <body>${htmlLabels}</body>
 </html>`)
@@ -1052,6 +1195,7 @@ export function BarcodePanel() {
                   payload={manualPayload}
                   format={format}
                   showEncodingLine
+                  paperWidthMm={wMm}
                   paperHeightMm={hMm}
                 />
               ) : (
@@ -1076,6 +1220,7 @@ export function BarcodePanel() {
                     caption={`${item.name} #${unitIndex}`}
                     metaLines={[]}
                     showEncodingLine
+                    paperWidthMm={wMm}
                     paperHeightMm={hMm}
                   />
                 ))
@@ -1107,7 +1252,9 @@ export function BarcodePanel() {
         </button>
       </div>
       <p className="text-xs text-slate-500 text-center">
-        인쇄는 미리보기와 별도로 고해상도 QR 코드를 용지 한 장에 맞춥니다. 어긋나면 용지 크기·여백 0·배율 100%를 다시 확인하세요.
+        {microQrPrint
+          ? '40×20mm: QR은 왼쪽·품목명은 오른쪽(가로 배치), 하단 코드 문자열은 생략합니다. 인쇄 시 여백 0·배율 100%로 맞추세요.'
+          : '인쇄는 미리보기와 별도로 고해상도 QR 코드를 용지 한 장에 맞춥니다. 어긋나면 용지 크기·여백 0·배율 100%를 다시 확인하세요.'}
       </p>
     </div>
   )
