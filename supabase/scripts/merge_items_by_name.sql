@@ -4,6 +4,8 @@
 -- · target 품목명·barcode_code 유지, source 품목 행만 삭제
 --
 -- 사용: 아래 v_target_name / v_source_name 확인 후 Supabase SQL Editor → Run
+-- 중간에 실패해도 [2]만 다시 Run 하면 됩니다 (이미 옮긴 lot/이력은 건너뜀).
+-- inventory_events 테이블이 없는 DB도 동작합니다.
 -- ============================================================
 
 -- [1] 병합 전 확인 (읽기 전용)
@@ -35,7 +37,9 @@ declare
   v_new_code text;
   v_try int;
   lot_r record;
+  v_has_inventory_events boolean;
 begin
+  v_has_inventory_events := to_regclass('public.inventory_events') is not null;
   for r in
     select
       t.id as target_id,
@@ -132,10 +136,12 @@ begin
       end if;
     end loop;
 
-    update public.inventory_events
-    set item_id = v_target_id
-    where item_id = v_source_id
-      and user_id = v_user_id;
+    if v_has_inventory_events then
+      update public.inventory_events
+      set item_id = v_target_id
+      where item_id = v_source_id
+        and user_id = v_user_id;
+    end if;
 
     delete from public.items
     where id = v_source_id
