@@ -29,13 +29,7 @@ begin
     inner join public.items s
       on s.user_id = t.user_id
       and s.id <> t.id
-      and (
-        btrim(s.name) = btrim(t.name) || '-5.27'
-        or (
-          s.name ilike '%' || regexp_replace(btrim(t.name), '^랙\((.+)\)$', '\1') || '%'
-          and s.name ilike '%5.27%'
-        )
-      )
+      and btrim(s.name) = btrim(t.name) || '-5.27'
     where btrim(t.name) in (
       '랙(SHR-151AL)',
       '랙(SH-CR1400)',
