@@ -69,14 +69,18 @@ const LABEL_PRESETS: LabelPreset[] = [
   { key: '100x50', label: '100 × 50mm', widthMm: 100, heightMm: 50 },
 ]
 
-/** 본문(캡션·메타) 공간을 조절해 바코드 영역을 최대화 */
+/** 본문(캡션·하단 코드 문자열) 공간을 빼고 QR/바코드가 들어갈 높이(mm) */
 function labelBarcodeMaxHeightMm(
   heightMm: number,
-  textMode: 'normal' | 'compact' | 'compact-with-text' = 'normal'
+  textMode: 'normal' | 'compact' | 'compact-with-text' = 'normal',
+  isQr: boolean = false,
 ): number {
   const pad = 1.2
-  const textReserve =
-    textMode === 'compact'
+  const textReserve = isQr
+    ? textMode === 'compact' || textMode === 'compact-with-text'
+      ? Math.min(7.5, Math.max(5.5, heightMm * 0.34))
+      : Math.min(14, Math.max(9.5, heightMm * 0.3))
+    : textMode === 'compact'
       ? Math.min(1.2, heightMm * 0.06)
       : textMode === 'compact-with-text'
         ? Math.min(4.2, Math.max(2.8, heightMm * 0.18))
@@ -124,7 +128,8 @@ function buildPrintIframeStyles(
   widthMm: number,
   heightMm: number,
   barcodeMaxMm: number,
-  compact: boolean
+  compact: boolean,
+  isQr: boolean = false,
 ): string {
   const pad = 1.2
   return `
@@ -167,7 +172,7 @@ function buildPrintIframeStyles(
         align-items: stretch;
         justify-content: flex-start;
         gap: 0.25mm;
-        overflow: hidden;
+        overflow: ${isQr ? 'visible' : 'hidden'};
         page-break-after: always;
         break-after: page;
       }
@@ -207,19 +212,21 @@ function buildPrintIframeStyles(
         max-width: 100%;
       }
       .barcode-wrap {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
         min-height: 0;
+        max-height: ${barcodeMaxMm}mm;
         display: flex;
         align-items: center;
         justify-content: center;
         width: 100%;
+        overflow: hidden;
       }
       .barcode {
         display: block;
-        width: 100%;
+        width: auto;
         max-width: 100%;
         height: auto;
-        max-height: ${barcodeMaxMm}mm;
+        max-height: 100%;
         object-fit: contain;
         object-position: center center;
         image-rendering: auto;
@@ -646,7 +653,7 @@ export function BarcodePanel() {
       if (!clean) return null
 
       const padMm = 1.2
-      const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm, textMode)
+      const barcodeMaxMm = labelBarcodeMaxHeightMm(labelHeightMm, textMode, format === 'QR')
       const maxWPx = Math.max(64, Math.round((labelWidthMm - padMm * 2) * DPMM_203))
       const maxHPx = Math.max(40, Math.round(barcodeMaxMm * DPMM_203))
 
@@ -762,8 +769,8 @@ export function BarcodePanel() {
   const wMm = paperPreset.widthMm
   const hMm = paperPreset.heightMm
   const printBarcodeMaxHeightMm = useMemo(
-    () => labelBarcodeMaxHeightMm(hMm, hMm <= 24 ? 'compact-with-text' : 'normal'),
-    [hMm]
+    () => labelBarcodeMaxHeightMm(hMm, hMm <= 24 ? 'compact-with-text' : 'normal', format === 'QR'),
+    [hMm, format]
   )
 
   async function printBarcode() {
@@ -842,7 +849,7 @@ export function BarcodePanel() {
   <head>
     <meta charset="utf-8" />
     <title>Barcode</title>
-    <style>${buildPrintIframeStyles(wMm, hMm, printBarcodeMaxHeightMm, compactPrint)}</style>
+    <style>${buildPrintIframeStyles(wMm, hMm, printBarcodeMaxHeightMm, compactPrint, format === 'QR')}</style>
   </head>
   <body>${htmlLabels}</body>
 </html>`)
