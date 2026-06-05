@@ -5,6 +5,13 @@ export type PlanSumRow = {
   planned_qty: number
 }
 
+export type ShippedTxRow = {
+  project: string | null
+  item_id: string
+  direction: 'in' | 'out'
+  amount: number
+}
+
 export type StockOverviewItem = {
   id: string
   name: string
@@ -32,11 +39,31 @@ export type ItemProjectRow = {
   remainQty: number
 }
 
+/** 프로젝트·품목별 출고(−입고) 누적 */
+export function buildShippedMap(transactions: ShippedTxRow[]): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const tx of transactions) {
+    const project = (tx.project ?? '').trim()
+    if (!project) continue
+    const k = `${project}::${tx.item_id}`
+    const delta = tx.direction === 'out' ? tx.amount : -tx.amount
+    map.set(k, (map.get(k) ?? 0) + delta)
+  }
+  return map
+}
+
+function netPlannedQty(gross: number, shipped: number): number {
+  return Math.max(0, gross - Math.max(0, shipped))
+}
+
 export function buildStockOverview(
   items: StockOverviewItem[],
   plans: PlanSumRow[],
-  selectedProject: string
+  selectedProject: string,
+  transactions: ShippedTxRow[] = [],
 ) {
+  const shippedMap = buildShippedMap(transactions)
+
   const allProjects = Array.from(new Set(plans.map(p => p.project_name).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b)
   )
@@ -45,7 +72,10 @@ export function buildStockOverview(
 
   const plannedByItem = new Map<string, number>()
   for (const row of filteredPlans) {
-    plannedByItem.set(row.item_id, (plannedByItem.get(row.item_id) ?? 0) + (row.planned_qty ?? 0))
+    const k = `${row.project_name}::${row.item_id}`
+    const shipped = Math.max(0, shippedMap.get(k) ?? 0)
+    const net = netPlannedQty(row.planned_qty ?? 0, shipped)
+    plannedByItem.set(row.item_id, (plannedByItem.get(row.item_id) ?? 0) + net)
   }
 
   const rows: ItemSummaryRow[] = items.map(item => {
@@ -87,8 +117,11 @@ export function buildStockOverview(
 
   const plannedMatrix = new Map<string, Map<string, number>>()
   for (const plan of filteredPlans) {
+    const k = `${plan.project_name}::${plan.item_id}`
+    const shipped = Math.max(0, shippedMap.get(k) ?? 0)
+    const net = netPlannedQty(plan.planned_qty ?? 0, shipped)
     const byProject = plannedMatrix.get(plan.item_id) ?? new Map<string, number>()
-    byProject.set(plan.project_name, (byProject.get(plan.project_name) ?? 0) + (plan.planned_qty ?? 0))
+    byProject.set(plan.project_name, (byProject.get(plan.project_name) ?? 0) + net)
     plannedMatrix.set(plan.item_id, byProject)
   }
 
