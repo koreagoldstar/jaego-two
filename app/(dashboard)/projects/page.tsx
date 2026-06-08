@@ -2,8 +2,10 @@ import { createClient } from '@/lib/supabase/server'
 import { buildCompletedProjectSet, splitProjectNames } from '@/lib/projects/projectStatus'
 import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
 import type { Item } from '@/lib/supabase/types'
+import { ProjectOutboundHistory } from '@/components/projects/ProjectOutboundHistory'
 import { ProjectPlanMultiForm } from '@/components/projects/ProjectPlanMultiForm'
 import { ProjectPlanSection } from '@/components/projects/ProjectPlanSection'
+import { normalizeProjectGroupKey } from '@/lib/history/groupByProject'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,8 +44,8 @@ export default async function ProjectsPage() {
       .from('stock_transactions')
       .select('created_at, project, item_id, direction, amount, items(name)')
       .eq('user_id', user.id)
-      .not('project', 'is', null)
-      .neq('project', ''),
+      .order('created_at', { ascending: false })
+      .limit(500),
     supabase
       .from('project_status')
       .select('project_name, completed_at')
@@ -120,17 +122,16 @@ export default async function ProjectsPage() {
   const completedOutRows = txRows
     .filter(tx => tx.direction === 'out')
     .map(tx => {
-      const project = (tx.project ?? '').trim()
+      const project = normalizeProjectGroupKey(tx.project)
+      const rawProject = (tx.project ?? '').trim()
       return {
         created_at: tx.created_at,
         project,
-        install_date: projectInstallDate.get(project) ?? null,
+        install_date: rawProject ? (projectInstallDate.get(rawProject) ?? null) : null,
         item_name: tx.items?.[0]?.name ?? (itemById.get(tx.item_id)?.name ?? '품목'),
         amount: tx.amount,
       }
     })
-    .filter(row => row.project)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
 
   const itemOptions = items.map(item => ({ id: item.id, name: item.name, quantity: item.quantity ?? 0 }))
 
@@ -223,35 +224,14 @@ export default async function ProjectsPage() {
       </div>
 
       <section className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
-        <h2 className="text-base font-semibold text-slate-900">프로젝트 출고 완료 이력</h2>
-        {completedOutRows.length === 0 ? (
-          <p className="text-sm text-slate-500">출고 완료 이력이 없습니다.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-slate-500 border-b border-slate-200">
-                  <th className="py-2 pr-3">출고일시</th>
-                  <th className="py-2 pr-3">설치일자</th>
-                  <th className="py-2 pr-3">프로젝트</th>
-                  <th className="py-2 pr-3">품목</th>
-                  <th className="py-2 text-right">수량</th>
-                </tr>
-              </thead>
-              <tbody>
-                {completedOutRows.map((row, idx) => (
-                  <tr key={`${row.project}-${row.item_name}-${row.created_at}-${idx}`} className="border-b border-slate-100 last:border-0">
-                    <td className="py-2 pr-3 text-slate-700">{new Date(row.created_at).toLocaleString('ko-KR')}</td>
-                    <td className="py-2 pr-3 text-slate-700">{row.install_date ?? '미정'}</td>
-                    <td className="py-2 pr-3 text-slate-900">{row.project}</td>
-                    <td className="py-2 pr-3 text-slate-900">{row.item_name}</td>
-                    <td className="py-2 text-right tabular-nums text-orange-700">{row.amount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">프로젝트 출고 완료 이력</h2>
+          <p className="text-xs text-slate-500 mt-0.5">프로젝트별로 묶어 보기 · 항목을 누르면 상세 목록이 펼쳐집니다.</p>
+        </div>
+        <ProjectOutboundHistory
+          rows={completedOutRows}
+          installDateByProject={Object.fromEntries(projectInstallDate)}
+        />
       </section>
     </div>
   )

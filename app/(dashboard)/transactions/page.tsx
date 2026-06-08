@@ -86,7 +86,9 @@ export default async function TransactionsPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-900">입출고 이력</h1>
-          <p className="text-sm text-slate-500">최근 200건 · 카드에서 수정 가능 (입출고 금액/구분은 기록 참고용)</p>
+          <p className="text-sm text-slate-500">
+            최근 200건 · 프로젝트별로 묶어 보기 · 항목을 누르면 상세가 펼쳐집니다
+          </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 flex flex-wrap items-center gap-2 shrink-0">
           <span className="text-sm font-medium text-slate-800">엑셀</span>
