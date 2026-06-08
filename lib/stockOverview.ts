@@ -61,14 +61,21 @@ export function buildStockOverview(
   plans: PlanSumRow[],
   selectedProject: string,
   transactions: ShippedTxRow[] = [],
+  completedProjects: Set<string> = new Set(),
 ) {
   const shippedMap = buildShippedMap(transactions)
 
-  const allProjects = Array.from(new Set(plans.map(p => p.project_name).filter(Boolean))).sort((a, b) =>
+  const activePlans = completedProjects.size
+    ? plans.filter(p => !completedProjects.has((p.project_name ?? '').trim()))
+    : plans
+
+  const allProjects = Array.from(new Set(activePlans.map(p => p.project_name).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b)
   )
 
-  const filteredPlans = selectedProject ? plans.filter(row => row.project_name === selectedProject) : plans
+  const filteredPlans = selectedProject
+    ? activePlans.filter(row => row.project_name === selectedProject)
+    : activePlans
 
   const plannedByItem = new Map<string, number>()
   for (const row of filteredPlans) {

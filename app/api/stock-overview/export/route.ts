@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
+import { buildCompletedProjectSet } from '@/lib/projects/projectStatus'
+import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
 import { buildStockOverview, type PlanSumRow, type ShippedTxRow } from '@/lib/stockOverview'
 import type { Item } from '@/lib/supabase/types'
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,7 +18,7 @@ export async function GET(request: NextRequest) {
   const type = request.nextUrl.searchParams.get('type') ?? 'items'
   const selectedProject = (request.nextUrl.searchParams.get('project') ?? '').trim()
 
-  const [itemsRes, plansRes, txRes] = await Promise.all([
+  const [itemsRes, plansRes, txRes, statusRes] = await Promise.all([
     supabase.from('items').select('id, name, quantity, sh').eq('user_id', user.id).order('name'),
     supabase
       .from('project_usage_plans')
@@ -28,12 +30,14 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .not('project', 'is', null)
       .neq('project', ''),
+    supabase.from('project_status').select('project_name, completed_at').eq('user_id', user.id),
   ])
 
   const items = (itemsRes.data ?? []) as Item[]
   const plans = (plansRes.data ?? []) as PlanSumRow[]
   const transactions = (txRes.data ?? []) as ShippedTxRow[]
-  const overview = buildStockOverview(items, plans, selectedProject, transactions)
+  const completedProjects = buildCompletedProjectSet((statusRes.data ?? []) as ProjectStatusRow[])
+  const overview = buildStockOverview(items, plans, selectedProject, transactions, completedProjects)
 
   const wb = XLSX.utils.book_new()
 

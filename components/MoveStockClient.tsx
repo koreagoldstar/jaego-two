@@ -91,7 +91,7 @@ export function MoveStockClient() {
       unitOptions[itemId] = buildStockUnitOptions(lots)
     }
     setLotsByItem(unitOptions)
-    const [projectRes, txRes] = await Promise.all([
+    const [projectRes, txRes, statusRes] = await Promise.all([
       supabase.from('project_usage_plans').select('project_name, item_id, planned_qty').eq('user_id', user.id),
       supabase
         .from('stock_transactions')
@@ -99,8 +99,16 @@ export function MoveStockClient() {
         .eq('user_id', user.id)
         .not('project', 'is', null)
         .neq('project', ''),
+      supabase.from('project_status').select('project_name').eq('user_id', user.id),
     ])
-    const rows = (projectRes.data ?? []) as Array<{ project_name?: string; item_id?: string; planned_qty?: number }>
+    const completedProjects = new Set(
+      ((statusRes.data ?? []) as Array<{ project_name?: string }>)
+        .map(r => (r.project_name ?? '').trim())
+        .filter(Boolean),
+    )
+    const rows = ((projectRes.data ?? []) as Array<{ project_name?: string; item_id?: string; planned_qty?: number }>).filter(
+      r => !completedProjects.has((r.project_name ?? '').trim()),
+    )
     const txRows = (txRes.data ?? []) as Array<{
       project?: string | null
       item_id?: string

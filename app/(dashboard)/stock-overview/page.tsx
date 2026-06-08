@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Item } from '@/lib/supabase/types'
+import { buildCompletedProjectSet } from '@/lib/projects/projectStatus'
+import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
 import { buildStockOverview, type PlanSumRow, type ShippedTxRow } from '@/lib/stockOverview'
 
 export const dynamic = 'force-dynamic'
@@ -15,7 +17,7 @@ export default async function StockOverviewPage({
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [itemsRes, plansRes, txRes] = await Promise.all([
+  const [itemsRes, plansRes, txRes, statusRes] = await Promise.all([
     supabase.from('items').select('id, name, quantity, sh').eq('user_id', user.id).order('name'),
     supabase
       .from('project_usage_plans')
@@ -27,15 +29,17 @@ export default async function StockOverviewPage({
       .eq('user_id', user.id)
       .not('project', 'is', null)
       .neq('project', ''),
+    supabase.from('project_status').select('project_name, completed_at').eq('user_id', user.id),
   ])
 
   const items = (itemsRes.data ?? []) as Item[]
   const plans = (plansRes.data ?? []) as PlanSumRow[]
   const transactions = (txRes.data ?? []) as ShippedTxRow[]
+  const completedProjects = buildCompletedProjectSet((statusRes.data ?? []) as ProjectStatusRow[])
   const selectedProject = (searchParams?.project ?? '').trim()
 
   const { allProjects, rows, totalCurrent, totalPlanned, totalRemain, projectColumns, itemProjectRows } =
-    buildStockOverview(items, plans, selectedProject, transactions)
+    buildStockOverview(items, plans, selectedProject, transactions, completedProjects)
 
   const exportQuery = selectedProject ? `?project=${encodeURIComponent(selectedProject)}` : ''
 

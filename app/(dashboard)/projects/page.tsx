@@ -1,11 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
-import {
-  deleteProjectPlanAction,
-  saveProjectPlanAction,
-  updateProjectPlanEntryAction,
-} from '@/app/(dashboard)/projects/actions'
+import { buildCompletedProjectSet, splitProjectNames } from '@/lib/projects/projectStatus'
+import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
 import type { Item } from '@/lib/supabase/types'
 import { ProjectPlanMultiForm } from '@/components/projects/ProjectPlanMultiForm'
+import { ProjectPlanSection } from '@/components/projects/ProjectPlanSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +30,7 @@ export default async function ProjectsPage() {
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [itemsRes, planRes, txRes] = await Promise.all([
+  const [itemsRes, planRes, txRes, statusRes] = await Promise.all([
     supabase.from('items').select('id, name, quantity').eq('user_id', user.id).order('name'),
     supabase
       .from('project_usage_plans')
@@ -46,18 +44,25 @@ export default async function ProjectsPage() {
       .eq('user_id', user.id)
       .not('project', 'is', null)
       .neq('project', ''),
+    supabase
+      .from('project_status')
+      .select('project_name, completed_at')
+      .eq('user_id', user.id)
+      .order('completed_at', { ascending: false }),
   ])
 
-  const itemsData = itemsRes.data
-  const planData = planRes.data
-  const txData = txRes.data
-
-  const items = (itemsData ?? []) as Item[]
+  const items = (itemsRes.data ?? []) as Item[]
+  const plans = (planRes.data ?? []) as unknown as PlanRow[]
+  const txRows = (txRes.data ?? []) as TxRow[]
+  const statusRows = (statusRes.data ?? []) as ProjectStatusRow[]
   const itemById = new Map(items.map(item => [item.id, item] as const))
-  const plans = (planData ?? []) as unknown as PlanRow[]
-  const txRows = (txData ?? []) as TxRow[]
+  const completedSet = buildCompletedProjectSet(statusRows)
+  const completedAtByProject = new Map(statusRows.map(r => [r.project_name, r.completed_at] as const))
 
-  if (itemsRes.error || planRes.error || txRes.error) {
+  const planError = planRes.error
+  const statusMissing = statusRes.error?.message?.toLowerCase().includes('project_status')
+
+  if (itemsRes.error || planError || txRes.error) {
     return (
       <div className="space-y-4">
         <div>
@@ -65,9 +70,9 @@ export default async function ProjectsPage() {
           <p className="text-sm text-red-600">데이터를 불러오는 중 오류가 발생했습니다.</p>
         </div>
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {planRes.error?.message?.includes('project_usage_plans')
+          {planError?.message?.includes('project_usage_plans')
             ? 'DB 마이그레이션(005_project_usage_plans.sql)이 아직 적용되지 않았습니다. Supabase SQL Editor에서 먼저 실행해주세요.'
-            : planRes.error?.message ?? itemsRes.error?.message ?? txRes.error?.message ?? '알 수 없는 오류'}
+            : planError?.message ?? itemsRes.error?.message ?? txRes.error?.message ?? '알 수 없는 오류'}
         </div>
       </div>
     )
@@ -98,7 +103,7 @@ export default async function ProjectsPage() {
     }
   }
 
-  const projectNames = Array.from(grouped.keys()).sort((a, b) => {
+  const allProjectNames = Array.from(grouped.keys()).sort((a, b) => {
     const da = projectInstallDate.get(a) ?? ''
     const db = projectInstallDate.get(b) ?? ''
     if (da && db) return da.localeCompare(db) || a.localeCompare(b)
@@ -106,6 +111,11 @@ export default async function ProjectsPage() {
     if (db) return 1
     return a.localeCompare(b)
   })
+
+  const { active: activeProjectNames, completed: completedProjectNames } = splitProjectNames(
+    allProjectNames,
+    completedSet,
+  )
 
   const completedOutRows = txRows
     .filter(tx => tx.direction === 'out')
@@ -122,16 +132,26 @@ export default async function ProjectsPage() {
     .filter(row => row.project)
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
 
+  const itemOptions = items.map(item => ({ id: item.id, name: item.name, quantity: item.quantity ?? 0 }))
+
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-slate-900">프로젝트 사용예정 재고</h1>
-        <p className="text-sm text-slate-500">품목별 예정수량·현재재고·출고완료·잔여 예정수량을 한눈에 확인합니다.</p>
+        <p className="text-sm text-slate-500">
+          진행 중 프로젝트는 사용예정·재고요약·출고에 반영됩니다. 완료 처리하면 완료 섹션으로 이동하고 예정 집계에서 제외됩니다.
+        </p>
       </div>
 
+      {statusMissing && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          프로젝트 완료 기능 DB(017_project_completion.sql)가 아직 없습니다. Supabase SQL Editor에서 실행해주세요.
+        </div>
+      )}
+
       <ProjectPlanMultiForm
-        items={items.map(item => ({ id: item.id, name: item.name, quantity: item.quantity ?? 0 }))}
-        projects={projectNames.map(projectName => ({
+        items={itemOptions}
+        projects={activeProjectNames.map(projectName => ({
           project_name: projectName,
           install_date: projectInstallDate.get(projectName) ?? null,
           rows: (grouped.get(projectName) ?? []).map(row => ({
@@ -147,7 +167,7 @@ export default async function ProjectsPage() {
           href="/api/projects/export?type=plans"
           className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
         >
-          사용예정 재고
+          사용예정 재고 (진행 중)
         </a>
         <a
           href="/api/projects/export?type=history"
@@ -157,139 +177,50 @@ export default async function ProjectsPage() {
         </a>
       </div>
 
-      {projectNames.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 bg-white">
-          등록된 프로젝트 예정 수량이 없습니다.
-        </p>
-      ) : (
-        <div className="space-y-4">
-          {projectNames.map(projectName => {
-            const rows = grouped.get(projectName) ?? []
-            return (
-              <section key={projectName} className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-base font-semibold text-slate-900">{projectName}</h2>
-                  <span className="text-xs text-slate-500">
-                    설치 일정: {projectInstallDate.get(projectName) || '미정'}
-                  </span>
-                </div>
-                <form action={saveProjectPlanAction} className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 md:grid-cols-[1fr_120px_auto]">
-                  <input type="hidden" name="project_name" value={projectName} />
-                  <input type="hidden" name="install_date" value={projectInstallDate.get(projectName) ?? ''} />
-                  <div>
-                    <label className="sr-only" htmlFor={`add-item-${projectName}`}>
-                      품목 추가
-                    </label>
-                    <select
-                      id={`add-item-${projectName}`}
-                      name="item_id"
-                      required
-                      defaultValue=""
-                      className="w-full rounded-md border border-slate-200 px-2 py-2 text-sm bg-white"
-                    >
-                      <option value="" disabled>
-                        이 프로젝트에 품목 추가…
-                      </option>
-                      {items.map(item => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="sr-only" htmlFor={`add-qty-${projectName}`}>
-                      사용예정 수량
-                    </label>
-                    <input
-                      id={`add-qty-${projectName}`}
-                      name="planned_qty"
-                      type="number"
-                      min={0}
-                      defaultValue={1}
-                      className="w-full rounded-md border border-slate-200 px-2 py-2 text-sm text-right tabular-nums bg-white"
-                    />
-                  </div>
-                  <button type="submit" className="rounded-md bg-emerald-600 text-white px-3 py-2 text-sm font-medium whitespace-nowrap">
-                    품목 추가
-                  </button>
-                </form>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-slate-500 border-b border-slate-200">
-                        <th className="py-2 pr-3">품목</th>
-                        <th className="py-2 pr-3 text-right">현재 재고</th>
-                        <th className="py-2 pr-3 text-right">사용예정</th>
-                        <th className="py-2 pr-3 text-right">출고완료</th>
-                        <th className="py-2 text-right">예정 잔여</th>
-                        <th className="py-2 pl-3 text-right">수정/삭제</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map(row => (
-                        <tr key={`${row.project_name}-${row.item_id}`} className="border-b border-slate-100 last:border-0">
-                          <td className="py-2 pr-3 text-slate-900">{itemById.get(row.item_id)?.name ?? '품목'}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">{itemById.get(row.item_id)?.quantity ?? 0}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">{row.planned_qty}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">{row.shipped}</td>
-                          <td className={`py-2 text-right tabular-nums ${row.remaining <= 0 ? 'text-emerald-600' : 'text-orange-600'}`}>
-                            {row.remaining}
-                          </td>
-                          <td className="py-2 pl-3">
-                            <div className="flex justify-end gap-2">
-                              <form action={updateProjectPlanEntryAction} className="flex items-center gap-1.5">
-                                <input type="hidden" name="project_name" value={row.project_name} />
-                                <input type="hidden" name="install_date" value={row.install_date ?? ''} />
-                                <input type="hidden" name="original_item_id" value={row.item_id} />
-                                <select
-                                  name="item_id"
-                                  defaultValue={row.item_id}
-                                  className="max-w-[11rem] rounded-md border border-slate-200 px-2 py-1 text-xs"
-                                  aria-label="품목 선택"
-                                >
-                                  {items.map(item => (
-                                    <option key={item.id} value={item.id}>
-                                      {item.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <input
-                                  name="planned_qty"
-                                  type="number"
-                                  min={0}
-                                  defaultValue={row.planned_qty}
-                                  className="w-20 rounded-md border border-slate-200 px-2 py-1 text-xs text-right tabular-nums"
-                                />
-                                <button
-                                  type="submit"
-                                  className="rounded-md bg-blue-600 text-white px-2 py-1 text-xs font-medium whitespace-nowrap"
-                                >
-                                  수정
-                                </button>
-                              </form>
-                              <form action={deleteProjectPlanAction}>
-                                <input type="hidden" name="project_name" value={row.project_name} />
-                                <input type="hidden" name="item_id" value={row.item_id} />
-                                <button
-                                  type="submit"
-                                  className="rounded-md border border-red-200 bg-red-50 text-red-700 px-2 py-1 text-xs font-medium whitespace-nowrap"
-                                >
-                                  삭제
-                                </button>
-                              </form>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )
-          })}
-        </div>
-      )}
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold text-slate-900">진행 중 프로젝트</h2>
+        {activeProjectNames.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 bg-white">
+            진행 중인 프로젝트가 없습니다.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {activeProjectNames.map(projectName => (
+              <ProjectPlanSection
+                key={projectName}
+                mode="active"
+                projectName={projectName}
+                installDate={projectInstallDate.get(projectName) ?? null}
+                items={itemOptions}
+                rows={grouped.get(projectName) ?? []}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold text-slate-900">완료된 프로젝트</h2>
+        {completedProjectNames.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 bg-slate-50">
+            완료 처리된 프로젝트가 없습니다.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {completedProjectNames.map(projectName => (
+              <ProjectPlanSection
+                key={projectName}
+                mode="completed"
+                projectName={projectName}
+                installDate={projectInstallDate.get(projectName) ?? null}
+                completedAt={completedAtByProject.get(projectName) ?? null}
+                items={itemOptions}
+                rows={grouped.get(projectName) ?? []}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       <section className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
         <h2 className="text-base font-semibold text-slate-900">프로젝트 출고 완료 이력</h2>

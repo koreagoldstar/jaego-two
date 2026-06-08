@@ -50,11 +50,18 @@ export function BulkOutClient() {
     if (!user) return
     const { data } = await supabase.from('items').select('*').eq('user_id', user.id).order('name')
     setItems((data ?? []) as Item[])
-    const { data: projectRows } = await supabase
-      .from('project_usage_plans')
-      .select('project_name, item_id')
-      .eq('user_id', user.id)
-    const rows = (projectRows ?? []) as Array<{ project_name?: string; item_id?: string }>
+    const [{ data: projectRows }, { data: statusRows }] = await Promise.all([
+      supabase.from('project_usage_plans').select('project_name, item_id').eq('user_id', user.id),
+      supabase.from('project_status').select('project_name').eq('user_id', user.id),
+    ])
+    const completedProjects = new Set(
+      ((statusRows ?? []) as Array<{ project_name?: string }>)
+        .map(r => (r.project_name ?? '').trim())
+        .filter(Boolean),
+    )
+    const rows = ((projectRows ?? []) as Array<{ project_name?: string; item_id?: string }>).filter(
+      r => !completedProjects.has((r.project_name ?? '').trim()),
+    )
     const names = Array.from(new Set(rows.map(r => (r.project_name ?? '').trim()).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b)
     )

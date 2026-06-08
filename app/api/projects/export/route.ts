@@ -58,20 +58,23 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  const [{ data: planRows }, { data: itemRows }] = await Promise.all([
+  const [{ data: planRows }, { data: itemRows }, { data: statusRows }] = await Promise.all([
     supabase
       .from('project_usage_plans')
       .select('project_name, install_date, item_id, planned_qty')
       .eq('user_id', user.id)
       .order('project_name'),
     supabase.from('items').select('id, name, quantity').eq('user_id', user.id),
+    supabase.from('project_status').select('project_name').eq('user_id', user.id),
   ])
+  const completed = new Set((statusRows ?? []).map(r => (r.project_name ?? '').trim()).filter(Boolean))
+  const activePlans = (planRows ?? []).filter(r => !completed.has((r.project_name ?? '').trim()))
   const itemById = new Map((itemRows ?? []).map(r => [r.id, r] as const))
 
   const headers = ['프로젝트', '설치일자', '품목', '현재재고', '사용예정']
   const aoa = [
     headers,
-    ...(planRows ?? []).map(r => {
+    ...activePlans.map(r => {
       const item = itemById.get(r.item_id)
       return [
         r.project_name ?? '',

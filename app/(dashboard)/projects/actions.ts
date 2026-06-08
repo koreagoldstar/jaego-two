@@ -3,6 +3,14 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
+function revalidateProjectViews() {
+  revalidatePath('/projects')
+  revalidatePath('/stock-overview')
+  revalidatePath('/move')
+  revalidatePath('/move-app')
+  revalidatePath('/move-bulk')
+}
+
 export async function saveProjectPlanAction(formData: FormData) {
   const supabase = await createClient()
   const {
@@ -24,7 +32,7 @@ export async function saveProjectPlanAction(formData: FormData) {
       .eq('user_id', user.id)
       .eq('project_name', project_name)
       .eq('item_id', item_id)
-    revalidatePath('/projects')
+    revalidateProjectViews()
     return
   }
 
@@ -36,11 +44,10 @@ export async function saveProjectPlanAction(formData: FormData) {
       item_id,
       planned_qty,
     },
-    { onConflict: 'user_id,project_name,item_id' }
+    { onConflict: 'user_id,project_name,item_id' },
   )
 
-  revalidatePath('/projects')
-  revalidatePath('/stock-overview')
+  revalidateProjectViews()
 }
 
 export async function saveProjectPlanBatchAction(formData: FormData) {
@@ -78,12 +85,11 @@ export async function saveProjectPlanBatchAction(formData: FormData) {
         item_id: row.item_id,
         planned_qty: row.planned_qty,
       },
-      { onConflict: 'user_id,project_name,item_id' }
+      { onConflict: 'user_id,project_name,item_id' },
     )
   }
 
-  revalidatePath('/projects')
-  revalidatePath('/stock-overview')
+  revalidateProjectViews()
 }
 
 export async function deleteProjectPlanAction(formData: FormData) {
@@ -104,8 +110,7 @@ export async function deleteProjectPlanAction(formData: FormData) {
     .eq('project_name', project_name)
     .eq('item_id', item_id)
 
-  revalidatePath('/projects')
-  revalidatePath('/stock-overview')
+  revalidateProjectViews()
 }
 
 export async function updateProjectPlanEntryAction(formData: FormData) {
@@ -148,10 +153,46 @@ export async function updateProjectPlanEntryAction(formData: FormData) {
         item_id,
         planned_qty,
       },
-      { onConflict: 'user_id,project_name,item_id' }
+      { onConflict: 'user_id,project_name,item_id' },
     )
   }
 
-  revalidatePath('/projects')
-  revalidatePath('/stock-overview')
+  revalidateProjectViews()
+}
+
+export async function completeProjectAction(formData: FormData) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return
+
+  const project_name = String(formData.get('project_name') ?? '').trim()
+  if (!project_name) return
+
+  await supabase.from('project_status').upsert(
+    {
+      user_id: user.id,
+      project_name,
+      completed_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,project_name' },
+  )
+
+  revalidateProjectViews()
+}
+
+export async function reopenProjectAction(formData: FormData) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return
+
+  const project_name = String(formData.get('project_name') ?? '').trim()
+  if (!project_name) return
+
+  await supabase.from('project_status').delete().eq('user_id', user.id).eq('project_name', project_name)
+
+  revalidateProjectViews()
 }

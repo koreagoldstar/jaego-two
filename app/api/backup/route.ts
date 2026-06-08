@@ -10,6 +10,7 @@ const TABLE_KEYS = [
   'inventory_events',
   'item_stock_lots',
   'project_usage_plans',
+  'project_status',
 ] as const
 
 export async function GET() {
@@ -30,15 +31,17 @@ export async function GET() {
     invEventsRes,
     lotsRes,
     plansRes,
+    statusRes,
   ] = await Promise.all([
     supabase.from('items').select('*').eq('user_id', uid),
     supabase.from('stock_transactions').select('*').eq('user_id', uid),
     supabase.from('inventory_events').select('*').eq('user_id', uid),
     supabase.from('item_stock_lots').select('*').eq('user_id', uid),
     supabase.from('project_usage_plans').select('*').eq('user_id', uid),
+    supabase.from('project_status').select('*').eq('user_id', uid),
   ])
 
-  const responses = [itemsRes, stockTxRes, invEventsRes, lotsRes, plansRes]
+  const responses = [itemsRes, stockTxRes, invEventsRes, lotsRes, plansRes, statusRes]
   const missingTables: string[] = []
   let fatalError: string | null = null
 
@@ -48,6 +51,7 @@ export async function GET() {
     inventory_events: [],
     item_stock_lots: [],
     project_usage_plans: [],
+    project_status: [],
   }
 
   TABLE_KEYS.forEach((key, i) => {
@@ -77,6 +81,7 @@ export async function GET() {
     inventory_events: rowData.inventory_events,
     item_stock_lots: rowData.item_stock_lots,
     project_usage_plans: rowData.project_usage_plans,
+    project_status: rowData.project_status,
   }
 
   if (missingTables.length > 0) {
