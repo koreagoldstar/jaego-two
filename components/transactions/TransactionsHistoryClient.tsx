@@ -7,6 +7,7 @@ import {
   updateStockTransactionAction,
 } from '@/app/(dashboard)/transactions/actions'
 import { ProjectHistoryAccordion } from '@/components/history/ProjectHistoryAccordion'
+import { ProjectRenameInline } from '@/components/projects/ProjectRenameInline'
 import { groupHistoryByProject } from '@/lib/history/groupByProject'
 import { Loader2, Pencil, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -358,6 +359,7 @@ export function TransactionsHistoryClient({
     <ProjectHistoryAccordion
       groups={groups}
       emptyMessage="기록이 없습니다."
+      headerAction={projectKey => <ProjectRenameInline projectName={projectKey} />}
       renderItems={items => (
         <ul className="space-y-2">
           {items.map(tx => (

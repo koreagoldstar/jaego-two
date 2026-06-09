@@ -1,14 +1,106 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidateInventoryViews } from '@/lib/projects/revalidateViews'
 import { createClient } from '@/lib/supabase/server'
 
 function revalidateProjectViews() {
-  revalidatePath('/projects')
-  revalidatePath('/stock-overview')
-  revalidatePath('/move')
-  revalidatePath('/move-app')
-  revalidatePath('/move-bulk')
+  revalidateInventoryViews()
+}
+
+export async function renameProjectAction(formData: FormData) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
+
+  const old_name = String(formData.get('old_name') ?? '').trim()
+  const new_name = String(formData.get('new_name') ?? '').trim()
+
+  if (!old_name) return { ok: false as const, error: '기존 프로젝트명이 없습니다' }
+  if (!new_name) return { ok: false as const, error: '새 프로젝트명을 입력하세요' }
+  if (old_name === new_name) return { ok: true as const }
+
+  const [planHit, txHit, statusHit] = await Promise.all([
+    supabase
+      .from('project_usage_plans')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('project_name', new_name)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('stock_transactions')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('project', new_name)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('project_status')
+      .select('project_name')
+      .eq('user_id', user.id)
+      .eq('project_name', new_name)
+      .maybeSingle(),
+  ])
+
+  if (planHit.error && !planHit.error.message.toLowerCase().includes('project_usage_plans')) {
+    return { ok: false as const, error: planHit.error.message }
+  }
+  if (txHit.error) return { ok: false as const, error: txHit.error.message }
+  if (statusHit.error && !statusHit.error.message.toLowerCase().includes('project_status')) {
+    return { ok: false as const, error: statusHit.error.message }
+  }
+
+  if (planHit.data || txHit.data || statusHit.data) {
+    return { ok: false as const, error: '이미 사용 중인 프로젝트명입니다. 다른 이름을 입력하세요.' }
+  }
+
+  const { data: oldStatus } = await supabase
+    .from('project_status')
+    .select('completed_at')
+    .eq('user_id', user.id)
+    .eq('project_name', old_name)
+    .maybeSingle()
+
+  const { error: planError } = await supabase
+    .from('project_usage_plans')
+    .update({ project_name: new_name })
+    .eq('user_id', user.id)
+    .eq('project_name', old_name)
+  if (planError) return { ok: false as const, error: planError.message }
+
+  const { error: txError } = await supabase
+    .from('stock_transactions')
+    .update({ project: new_name })
+    .eq('user_id', user.id)
+    .eq('project', old_name)
+  if (txError) return { ok: false as const, error: txError.message }
+
+  if (oldStatus) {
+    const { error: delStatusError } = await supabase
+      .from('project_status')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('project_name', old_name)
+    if (delStatusError && !delStatusError.message.toLowerCase().includes('project_status')) {
+      return { ok: false as const, error: delStatusError.message }
+    }
+    if (!delStatusError) {
+      const { error: insStatusError } = await supabase.from('project_status').upsert(
+        {
+          user_id: user.id,
+          project_name: new_name,
+          completed_at: oldStatus.completed_at,
+        },
+        { onConflict: 'user_id,project_name' },
+      )
+      if (insStatusError) return { ok: false as const, error: insStatusError.message }
+    }
+  }
+
+  revalidateProjectViews()
+  return { ok: true as const }
 }
 
 export async function saveProjectPlanAction(formData: FormData) {

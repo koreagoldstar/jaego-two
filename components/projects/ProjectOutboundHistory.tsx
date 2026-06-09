@@ -1,6 +1,7 @@
 'use client'
 
 import { ProjectHistoryAccordion } from '@/components/history/ProjectHistoryAccordion'
+import { ProjectRenameInline } from '@/components/projects/ProjectRenameInline'
 import { groupHistoryByProject } from '@/lib/history/groupByProject'
 
 export type OutboundHistoryRow = {
@@ -27,6 +28,7 @@ export function ProjectOutboundHistory({ rows, installDateByProject }: Props) {
     <ProjectHistoryAccordion
       groups={groups}
       emptyMessage="출고 완료 이력이 없습니다."
+      headerAction={projectKey => <ProjectRenameInline projectName={projectKey} />}
       metaForGroup={group =>
         group.projectKey in installDateByProject
           ? `설치 ${installDateByProject[group.projectKey] || '미정'}`
