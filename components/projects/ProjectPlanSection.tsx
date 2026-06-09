@@ -5,6 +5,7 @@ import {
   saveProjectPlanAction,
   updateProjectPlanEntryAction,
 } from '@/app/(dashboard)/projects/actions'
+import { ProjectDeleteButton } from '@/components/projects/ProjectDeleteButton'
 import { ProjectRenameInline } from '@/components/projects/ProjectRenameInline'
 
 type ItemRow = { id: string; name: string; quantity: number }
@@ -58,27 +59,30 @@ export function ProjectPlanSection({
             ) : null}
           </p>
         </div>
-        {readOnly ? (
-          <form action={reopenProjectAction}>
-            <input type="hidden" name="project_name" value={projectName} />
-            <button
-              type="submit"
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
-            >
-              다시 진행
-            </button>
-          </form>
-        ) : (
-          <form action={completeProjectAction}>
-            <input type="hidden" name="project_name" value={projectName} />
-            <button
-              type="submit"
-              className="rounded-lg bg-slate-800 text-white px-3 py-1.5 text-sm font-medium hover:bg-slate-900"
-            >
-              완료 처리
-            </button>
-          </form>
-        )}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {readOnly ? (
+            <form action={reopenProjectAction}>
+              <input type="hidden" name="project_name" value={projectName} />
+              <button
+                type="submit"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                다시 진행
+              </button>
+            </form>
+          ) : (
+            <form action={completeProjectAction}>
+              <input type="hidden" name="project_name" value={projectName} />
+              <button
+                type="submit"
+                className="rounded-lg bg-slate-800 text-white px-3 py-1.5 text-sm font-medium hover:bg-slate-900"
+              >
+                완료 처리
+              </button>
+            </form>
+          )}
+          <ProjectDeleteButton projectName={projectName} variant="button" />
+        </div>
       </div>
 
       {!readOnly && (

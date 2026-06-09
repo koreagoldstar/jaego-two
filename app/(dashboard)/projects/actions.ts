@@ -288,3 +288,40 @@ export async function reopenProjectAction(formData: FormData) {
 
   revalidateProjectViews()
 }
+
+export async function deleteProjectAction(formData: FormData) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
+
+  const project_name = String(formData.get('project_name') ?? '').trim()
+  if (!project_name) return { ok: false as const, error: '프로젝트명이 없습니다' }
+
+  const { error: planError } = await supabase
+    .from('project_usage_plans')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('project_name', project_name)
+  if (planError) return { ok: false as const, error: planError.message }
+
+  const { error: statusError } = await supabase
+    .from('project_status')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('project_name', project_name)
+  if (statusError && !statusError.message.toLowerCase().includes('project_status')) {
+    return { ok: false as const, error: statusError.message }
+  }
+
+  const { error: txError } = await supabase
+    .from('stock_transactions')
+    .update({ project: '' })
+    .eq('user_id', user.id)
+    .eq('project', project_name)
+  if (txError) return { ok: false as const, error: txError.message }
+
+  revalidateProjectViews()
+  return { ok: true as const }
+}
