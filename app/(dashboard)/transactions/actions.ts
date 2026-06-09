@@ -8,6 +8,7 @@ import {
 } from '@/lib/items/knownLotCodes'
 import { deleteUnitLotsFifo } from '@/lib/items/stockLotFifo'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
+import { revalidateInventoryViews } from '@/lib/projects/revalidateViews'
 import { revalidatePath } from 'next/cache'
 
 function parseDatetimeLocalToIso(s: string): string | null {
@@ -72,7 +73,7 @@ export async function updateStockTransactionAction(id: string, formData: FormDat
     .eq('user_id', user.id)
 
   if (error) return { ok: false as const, error: error.message }
-  revalidatePath('/transactions')
+  revalidateInventoryViews()
   return { ok: true as const }
 }
 
@@ -196,10 +197,7 @@ export async function deleteStockTransactionAction(id: string) {
 
   if (delError) return { ok: false as const, error: delError.message }
 
-  revalidatePath('/transactions')
-  revalidatePath('/items')
-  revalidatePath('/stock-overview')
-  revalidatePath('/barcode')
+  revalidateInventoryViews()
   return { ok: true as const }
 }
 

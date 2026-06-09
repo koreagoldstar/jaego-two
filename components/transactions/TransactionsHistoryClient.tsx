@@ -59,14 +59,24 @@ function projectKeyForRow(tx: HistoryRow): string {
 
 type RowEditorProps = {
   tx: HistoryRow
+  projectOptions: string[]
   busy: string | null
   onCancel: () => void
   onSaveStock: (rawId: string, key: string, formData: FormData) => void
   onSaveInv: (rawId: string, key: string, formData: FormData) => void
 }
 
-function HistoryRowEditor({ tx, busy, onCancel, onSaveStock, onSaveInv }: RowEditorProps) {
+function projectSelectOptions(projectOptions: string[], current: string): string[] {
+  const trimmed = current.trim()
+  if (trimmed && !projectOptions.includes(trimmed)) {
+    return [trimmed, ...projectOptions]
+  }
+  return projectOptions
+}
+
+function HistoryRowEditor({ tx, projectOptions, busy, onCancel, onSaveStock, onSaveInv }: RowEditorProps) {
   if (tx.kind === 'stock') {
+    const options = projectSelectOptions(projectOptions, tx.project)
     return (
       <form className="space-y-2" action={fd => void onSaveStock(tx.rawId, tx.key, fd)}>
         <p className="text-xs font-medium text-slate-700">{tx.title}</p>
@@ -85,14 +95,21 @@ function HistoryRowEditor({ tx, busy, onCancel, onSaveStock, onSaveInv }: RowEdi
           />
         </label>
         <label className="block text-xs text-slate-500">
-          프로젝트/현장
-          <input
+          프로젝트
+          <select
             name="project"
-            type="text"
-            defaultValue={tx.project}
-            className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5"
-          />
+            defaultValue={tx.project.trim()}
+            className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 bg-white text-sm"
+          >
+            <option value="">프로젝트 없음</option>
+            {options.map(name => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
         </label>
+        <p className="text-[10px] text-slate-400">저장 시 재고요약·프로젝트 출고 집계에도 반영됩니다.</p>
         <label className="block text-xs text-slate-500">
           메모
           <input
@@ -191,6 +208,7 @@ function HistoryRowEditor({ tx, busy, onCancel, onSaveStock, onSaveInv }: RowEdi
 
 type RowCardProps = {
   tx: HistoryRow
+  projectOptions: string[]
   busy: string | null
   editingKey: string | null
   setEditingKey: (key: string | null) => void
@@ -201,6 +219,7 @@ type RowCardProps = {
 
 function HistoryRowCard({
   tx,
+  projectOptions,
   busy,
   editingKey,
   setEditingKey,
@@ -214,6 +233,7 @@ function HistoryRowCard({
         <div className="w-full">
           <HistoryRowEditor
             tx={tx}
+            projectOptions={projectOptions}
             busy={busy}
             onCancel={() => setEditingKey(null)}
             onSaveStock={onSaveStock}
@@ -268,7 +288,13 @@ function HistoryRowCard({
   )
 }
 
-export function TransactionsHistoryClient({ rows }: { rows: HistoryRow[] }) {
+export function TransactionsHistoryClient({
+  rows,
+  projectOptions,
+}: {
+  rows: HistoryRow[]
+  projectOptions: string[]
+}) {
   const router = useRouter()
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -338,6 +364,7 @@ export function TransactionsHistoryClient({ rows }: { rows: HistoryRow[] }) {
             <HistoryRowCard
               key={tx.key}
               tx={tx}
+              projectOptions={projectOptions}
               busy={busy}
               editingKey={editingKey}
               setEditingKey={setEditingKey}

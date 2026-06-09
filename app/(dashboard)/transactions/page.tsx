@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { buildTransactionQrDetailLines } from '@/lib/items/transactionQrDisplay'
+import { mergeProjectNameOptions } from '@/lib/projects/projectOptions'
 import type { StockTransaction } from '@/lib/supabase/types'
 import { TransactionsHistoryClient, type HistoryRow } from '@/components/transactions/TransactionsHistoryClient'
 
@@ -24,14 +25,20 @@ export default async function TransactionsPage() {
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const { data: rows } = await supabase
-    .from('stock_transactions')
-    .select('id, direction, amount, note, project, lot_code, created_at, items(name, barcode_code)')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(200)
+  const [txRes, planRes] = await Promise.all([
+    supabase
+      .from('stock_transactions')
+      .select('id, direction, amount, note, project, lot_code, created_at, items(name, barcode_code)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(200),
+    supabase.from('project_usage_plans').select('project_name').eq('user_id', user.id),
+  ])
 
-  const list = (rows ?? []) as unknown as Row[]
+  const list = (txRes.data ?? []) as unknown as Row[]
+  const planNames = (planRes.data ?? []).map(r => (r.project_name ?? '').trim()).filter(Boolean)
+  const txProjectNames = list.map(tx => (tx.project ?? '').trim()).filter(Boolean)
+  const projectOptions = mergeProjectNameOptions(planNames, txProjectNames)
   const { data: eventRows, error: eventError } = await supabase
     .from('inventory_events')
     .select('id, event_type, item_name, quantity, detail, created_at')
@@ -107,7 +114,7 @@ export default async function TransactionsPage() {
           기록이 없습니다.
         </p>
       ) : (
-        <TransactionsHistoryClient rows={historyRows} />
+        <TransactionsHistoryClient rows={historyRows} projectOptions={projectOptions} />
       )}
     </div>
   )
