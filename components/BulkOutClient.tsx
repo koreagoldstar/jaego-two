@@ -18,10 +18,14 @@ import type { Item } from '@/lib/supabase/types'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
 import { Loader2, Trash2 } from 'lucide-react'
 
+type ScanEntry = {
+  code: string
+  lotId: string | null
+}
+
 type ScanBucket = {
   item: Item
-  count: number
-  codes: string[]
+  scans: ScanEntry[]
 }
 
 export function BulkOutClient() {
@@ -35,7 +39,12 @@ export function BulkOutClient() {
   const [scanLine, setScanLine] = useState<string | null>(null)
   const [lastScanAt, setLastScanAt] = useState<string | null>(null)
   const [scanCount, setScanCount] = useState(0)
-  const [pendingScan, setPendingScan] = useState<{ code: string; itemId: string; itemName: string } | null>(null)
+  const [pendingScan, setPendingScan] = useState<{
+    code: string
+    itemId: string
+    itemName: string
+    lotId: string | null
+  } | null>(null)
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [bucket, setBucket] = useState<Record<string, ScanBucket>>({})
   const [bulkOutConfirmPending, setBulkOutConfirmPending] = useState(false)
@@ -119,12 +128,14 @@ export function BulkOutClient() {
       }
       if (hit?.unitMismatch) {
         setMsg({ type: 'err', text: UNIT_QR_MISMATCH_MESSAGE })
+        return
       }
       if (!hit) {
         setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
         return
       }
       const id = hit.itemId
+      const lotId = hit.lotId ?? null
       const selectedProject = project.trim()
       if (selectedProject) {
         const allowed = projectItemMap[selectedProject] ?? []
@@ -140,7 +151,7 @@ export function BulkOutClient() {
         return
       }
 
-      setPendingScan({ code: trimmed, itemId: id, itemName: item.name })
+      setPendingScan({ code: trimmed, itemId: id, itemName: item.name, lotId })
     },
     [items, pendingScan, project, projectItemMap]
   )
@@ -171,7 +182,7 @@ export function BulkOutClient() {
   }, [])
 
   const rows = useMemo(() => Object.values(bucket), [bucket])
-  const totalScans = useMemo(() => rows.reduce((s, r) => s + r.count, 0), [rows])
+  const totalScans = useMemo(() => rows.reduce((s, r) => s + r.scans.length, 0), [rows])
 
   function confirmPendingScan() {
     if (!pendingScan) return
@@ -180,15 +191,17 @@ export function BulkOutClient() {
       const current = prev[pendingScan.itemId]
       const item = current?.item ?? items.find(i => i.id === pendingScan.itemId)
       if (!item) return prev
-      const codes = current?.codes ?? []
-      if (codeKey && codes.some(c => c.toLowerCase() === codeKey)) {
+      const scans = current?.scans ?? []
+      if (codeKey && scans.some(s => s.code.toLowerCase() === codeKey)) {
         setMsg({ type: 'err', text: '이미 스캔 목록에 있는 QR입니다.' })
         return prev
       }
-      const nextCount = (current?.count ?? 0) + 1
       return {
         ...prev,
-        [pendingScan.itemId]: { item, count: nextCount, codes: [...codes, pendingScan.code.trim()] },
+        [pendingScan.itemId]: {
+          item,
+          scans: [...scans, { code: pendingScan.code.trim(), lotId: pendingScan.lotId }],
+        },
       }
     })
     setScanLine(`${pendingScan.itemName} 스캔 +1`)
@@ -198,16 +211,16 @@ export function BulkOutClient() {
     if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(35)
   }
 
-  const updateCount = useCallback((itemId: string, count: number) => {
+  const removeLastScan = useCallback((itemId: string) => {
     setBucket(prev => {
       const row = prev[itemId]
       if (!row) return prev
-      if (count <= 0) {
+      if (row.scans.length <= 1) {
         const next = { ...prev }
         delete next[itemId]
         return next
       }
-      return { ...prev, [itemId]: { ...row, count, codes: row.codes.slice(0, count) } }
+      return { ...prev, [itemId]: { ...row, scans: row.scans.slice(0, -1) } }
     })
   }, [])
 
@@ -246,24 +259,50 @@ export function BulkOutClient() {
     submittingRef.current = true
     setBusy(true)
     const supabase = createClient()
-    let okCount = 0
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      setMsg({ type: 'err', text: '로그인이 필요합니다.' })
+      submittingRef.current = false
+      setBusy(false)
+      return
+    }
+
+    let okScans = 0
     const failed: string[] = []
 
     try {
       for (const row of rows) {
-        const { error } = await supabase.rpc('apply_stock_move', {
-          p_item_id: row.item.id,
-          p_direction: 'out',
-          p_amount: row.count,
-          p_note: note.trim() || null,
-          p_project: project.trim(),
-        })
-        if (error) {
-          failed.push(`${row.item.name} (${error.message})`)
-        } else {
-          okCount++
-          for (const c of row.codes) {
-            if (parseUnitSuffixIndex(c) !== null) markRecentlyOutboundScanned(c)
+        for (const scan of row.scans) {
+          const hit = await findItemByBarcode(supabase, user.id, scan.code)
+          if (hit?.alreadyShipped) {
+            failed.push(`${row.item.name} · ${scan.code} (이미 출고됨)`)
+            continue
+          }
+          if (hit?.unitNotInStock) {
+            failed.push(`${row.item.name} · ${scan.code} (재고 없음)`)
+            continue
+          }
+          if (hit?.unitMismatch) {
+            failed.push(`${row.item.name} · ${scan.code} (QR 불일치)`)
+            continue
+          }
+
+          const lotId = hit?.lotId ?? scan.lotId
+          const { error } = await supabase.rpc('apply_stock_move', {
+            p_item_id: row.item.id,
+            p_direction: 'out',
+            p_amount: 1,
+            p_note: note.trim() || null,
+            p_project: project.trim(),
+            ...(lotId ? { p_lot_id: lotId } : {}),
+          })
+          if (error) {
+            failed.push(`${row.item.name} · ${scan.code} (${error.message})`)
+          } else {
+            okScans++
+            if (parseUnitSuffixIndex(scan.code) !== null) markRecentlyOutboundScanned(scan.code)
           }
         }
       }
@@ -272,10 +311,11 @@ export function BulkOutClient() {
         setBulkOutConfirmPending(false)
         setMsg({
           type: 'err',
-          text: `일부 실패: ${failed.slice(0, 3).join(' / ')}${failed.length > 3 ? ` 외 ${failed.length - 3}건` : ''}`,
+          text: `일부 실패 (${okScans}/${totalScans}건 완료): ${failed.slice(0, 3).join(' / ')}${failed.length > 3 ? ` 외 ${failed.length - 3}건` : ''}`,
         })
+        if (okScans > 0) await load()
       } else {
-        setMsg({ type: 'ok', text: `출고 완료: ${okCount}개 품목, 총 ${totalScans}개` })
+        setMsg({ type: 'ok', text: `출고 완료: ${rows.length}개 품목, 스캔 ${okScans}건 (QR 번호 그대로 기록)` })
         setBucket({})
         setNote('')
         setBulkOutConfirmPending(false)
@@ -299,7 +339,7 @@ export function BulkOutClient() {
   return (
     <div className="space-y-4">
       <p className="text-center text-xs text-slate-500 leading-relaxed px-1">
-        여러 제품 QR 코드를 연속으로 찍고, 프로젝트 1개로 한 번에 출고 처리합니다.
+        여러 제품 QR을 연속으로 찍고 프로젝트 1개로 일괄 출고합니다. 스캔한 QR 번호가 출고 이력에 그대로 기록됩니다.
       </p>
 
       <BarcodeCamera
@@ -408,15 +448,17 @@ export function BulkOutClient() {
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900 truncate">{row.item.name}</p>
-                    <p className="text-xs text-slate-500">현재 재고 {row.item.quantity}</p>
+                    <p className="text-xs text-slate-500">
+                      스캔 {row.scans.length}건 · 현재 재고 {row.item.quantity}
+                    </p>
                   </div>
-                  <input
-                    type="number"
-                    min={1}
-                    value={row.count}
-                    onChange={e => updateCount(row.item.id, Math.max(1, parseInt(e.target.value || '1', 10)))}
-                    className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-sm text-right tabular-nums"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => removeLastScan(row.item.id)}
+                    className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 shrink-0"
+                  >
+                    1건 취소
+                  </button>
                 </div>
               </li>
             ))}
@@ -446,7 +488,7 @@ export function BulkOutClient() {
           <ul className="text-[11px] text-orange-800/90 max-h-28 overflow-y-auto space-y-0.5">
             {rows.map(row => (
               <li key={row.item.id}>
-                {row.item.name} × {row.count}
+                {row.item.name} × {row.scans.length}
               </li>
             ))}
           </ul>
