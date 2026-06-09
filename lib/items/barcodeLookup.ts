@@ -153,12 +153,19 @@ async function findSingleActiveLotForItem(
   return null
 }
 
+export type BarcodeLookupOptions = {
+  /** 단위 QR(-001 등)는 DB lot_code와 글자가 정확히 일치할 때만 매칭 (일괄 출고용) */
+  strictUnitQr?: boolean
+}
+
 /** 사용자 품목 중 스캔 문자열로 품목·입고 단위 조회 */
 export async function findItemByBarcode(
   supabase: SupabaseClient,
   userId: string,
-  rawCode: string
+  rawCode: string,
+  options: BarcodeLookupOptions = {},
 ): Promise<BarcodeLookupResult | null> {
+  const { strictUnitQr = false } = options
   const code = normalizeBarcodePayload(rawCode)
   if (!code) return null
 
@@ -230,14 +237,16 @@ export async function findItemByBarcode(
       return { itemId, lotId: null, alreadyShipped: true }
     }
 
-    const suffixIndex = parseUnitSuffixIndex(code)
-    if (suffixIndex !== null) {
-      const bySuffix = await findActiveLotBySuffixIndex(supabase, userId, itemId, suffixIndex)
-      if (bySuffix) return { itemId, lotId: bySuffix }
-    }
+    if (!strictUnitQr) {
+      const suffixIndex = parseUnitSuffixIndex(code)
+      if (suffixIndex !== null) {
+        const bySuffix = await findActiveLotBySuffixIndex(supabase, userId, itemId, suffixIndex)
+        if (bySuffix) return { itemId, lotId: bySuffix }
+      }
 
-    const onlyLot = await findSingleActiveLotForItem(supabase, userId, itemId)
-    if (onlyLot) return { itemId, lotId: onlyLot }
+      const onlyLot = await findSingleActiveLotForItem(supabase, userId, itemId)
+      if (onlyLot) return { itemId, lotId: onlyLot }
+    }
 
     const { data: lots } = await supabase
       .from('item_stock_lots')

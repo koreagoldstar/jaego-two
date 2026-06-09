@@ -115,7 +115,7 @@ export function BulkOutClient() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const hit = await findItemByBarcode(supabase, user.id, trimmed)
+      const hit = await findItemByBarcode(supabase, user.id, trimmed, { strictUnitQr: true })
       if (hit?.alreadyShipped) {
         window.alert(ALREADY_SHIPPED_MESSAGE)
         setMsg({ type: 'err', text: ALREADY_SHIPPED_MESSAGE })
@@ -127,7 +127,10 @@ export function BulkOutClient() {
         return
       }
       if (hit?.unitMismatch) {
-        setMsg({ type: 'err', text: UNIT_QR_MISMATCH_MESSAGE })
+        setMsg({
+          type: 'err',
+          text: `${UNIT_QR_MISMATCH_MESSAGE} (라벨 QR이 DB와 다릅니다. 품목 상세에서 lot 코드를 확인하세요.)`,
+        })
         return
       }
       if (!hit) {
@@ -275,7 +278,7 @@ export function BulkOutClient() {
     try {
       for (const row of rows) {
         for (const scan of row.scans) {
-          const hit = await findItemByBarcode(supabase, user.id, scan.code)
+          const hit = await findItemByBarcode(supabase, user.id, scan.code, { strictUnitQr: true })
           if (hit?.alreadyShipped) {
             failed.push(`${row.item.name} · ${scan.code} (이미 출고됨)`)
             continue
@@ -290,11 +293,12 @@ export function BulkOutClient() {
           }
 
           const lotId = hit?.lotId ?? scan.lotId
+          const noteParts = ['[일괄출고]', note.trim(), `스캔:${scan.code.trim()}`].filter(Boolean)
           const { error } = await supabase.rpc('apply_stock_move', {
             p_item_id: row.item.id,
             p_direction: 'out',
             p_amount: 1,
-            p_note: note.trim() || null,
+            p_note: noteParts.join(' '),
             p_project: project.trim(),
             ...(lotId ? { p_lot_id: lotId } : {}),
           })
