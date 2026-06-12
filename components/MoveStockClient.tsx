@@ -31,7 +31,6 @@ export function MoveStockClient() {
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string>('')
   const [selectedLotId, setSelectedLotId] = useState<string>('')
-  const [amount, setAmount] = useState(1)
   const [project, setProject] = useState('')
   const [projectOptions, setProjectOptions] = useState<string[]>([])
   const [projectItemMap, setProjectItemMap] = useState<Record<string, string[]>>({})
@@ -309,7 +308,7 @@ export function MoveStockClient() {
   function requestOut() {
     setMsg(null)
     setOutConfirmPending(false)
-    if (!selectedId || amount < 1) {
+    if (!selectedId) {
       setMsg({ type: 'err', text: '스캔으로 품목을 먼저 선택하세요.' })
       return
     }
@@ -327,7 +326,7 @@ export function MoveStockClient() {
   async function run(direction: 'in' | 'out') {
     if (submittingRef.current) return
     setMsg(null)
-    if (!selectedId || amount < 1) {
+    if (!selectedId) {
       setMsg({ type: 'err', text: '스캔으로 품목을 먼저 선택하세요.' })
       return
     }
@@ -350,7 +349,6 @@ export function MoveStockClient() {
       setMsg({ type: 'err', text: '출고할 재고 단위를 선택하세요.' })
       return
     }
-    const requestAmount = direction === 'out' ? 1 : amount
     submittingRef.current = true
     setBusy(true)
     try {
@@ -358,7 +356,7 @@ export function MoveStockClient() {
       const { data, error } = await supabase.rpc('apply_stock_move', {
         p_item_id: selectedId,
         p_direction: direction,
-        p_amount: requestAmount,
+        p_amount: 1,
         p_note: note.trim() || null,
         p_project: project.trim() || null,
         ...(direction === 'out' && selectedLotId ? { p_lot_id: selectedLotId } : {}),
@@ -368,9 +366,8 @@ export function MoveStockClient() {
         return
       }
       if (data) {
-        setMsg({ type: 'ok', text: direction === 'in' ? '입고 완료' : '출고 완료 (스캔 1개 기준)' })
+        setMsg({ type: 'ok', text: direction === 'in' ? '입고 1건 완료' : '출고 1건 완료' })
         setNote('')
-        setAmount(1)
         if (direction === 'out') {
           if (activeUnitScanCode?.trim()) markRecentlyOutboundScanned(activeUnitScanCode)
           setOutConfirmPending(false)
@@ -399,7 +396,7 @@ export function MoveStockClient() {
   return (
     <div className="space-y-4">
       <p className="text-center text-xs text-slate-500 leading-relaxed px-1">
-        카메라로 비추거나, 무선 스캐너로 찍으면 품목이 잡힙니다. 그다음 수량·입고/출고만 누르면 됩니다.
+        QR을 스캔하면 품목·단위가 잡힙니다. 입고/출고는 스캔 1회당 1건씩 처리됩니다.
       </p>
 
       <BarcodeCamera
@@ -579,32 +576,6 @@ export function MoveStockClient() {
             프로젝트 품목 {projectItems.length}개가 연동됩니다. 스캔 시 해당 품목만 출고 선택됩니다.
           </p>
         )}
-      </div>
-
-      <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
-        <label className="block text-sm font-medium text-slate-700">수량</label>
-        <div className="flex gap-2 flex-wrap">
-          {[1, 5, 10, 50].map(n => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setAmount(n)}
-              className={`rounded-xl px-4 py-2 text-sm font-medium border ${
-                amount === n ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 border-slate-200'
-              }`}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-        <input
-          type="number"
-          min={1}
-          value={amount}
-          onChange={e => setAmount(Math.max(1, parseInt(e.target.value, 10) || 1))}
-          className="w-full rounded-xl border border-slate-200 px-3 py-3 text-lg font-semibold tabular-nums"
-        />
-        <p className="text-xs text-slate-500">출고 버튼은 안전을 위해 항상 1개만 처리됩니다.</p>
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">

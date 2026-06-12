@@ -7,7 +7,7 @@ export default function MovePage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-slate-900">입·출고</h1>
-        <p className="text-sm text-slate-500">휴대폰에서 품목·프로젝트·수량을 입력하세요.</p>
+        <p className="text-sm text-slate-500">QR 스캔으로 품목·단위를 선택하고 프로젝트와 함께 입·출고하세요.</p>
         <p className="text-sm mt-2">
           <Link
             href="/move-app"
