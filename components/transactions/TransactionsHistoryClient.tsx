@@ -292,9 +292,13 @@ function HistoryRowCard({
 export function TransactionsHistoryClient({
   rows,
   projectOptions,
+  groupBy = 'project',
+  onHistoryMutated,
 }: {
   rows: HistoryRow[]
   projectOptions: string[]
+  groupBy?: 'project' | 'flat'
+  onHistoryMutated?: () => void
 }) {
   const router = useRouter()
   const [editingKey, setEditingKey] = useState<string | null>(null)
@@ -316,8 +320,9 @@ export function TransactionsHistoryClient({
       }
       setEditingKey(null)
       router.refresh()
+      onHistoryMutated?.()
     },
-    [router],
+    [router, onHistoryMutated],
   )
 
   const onDelete = useCallback(
@@ -336,8 +341,9 @@ export function TransactionsHistoryClient({
       }
       if (editingKey === tx.key) setEditingKey(null)
       router.refresh()
+      onHistoryMutated?.()
     },
-    [router, editingKey],
+    [router, editingKey, onHistoryMutated],
   )
 
   const onSaveInv = useCallback(
@@ -351,32 +357,42 @@ export function TransactionsHistoryClient({
       }
       setEditingKey(null)
       router.refresh()
+      onHistoryMutated?.()
     },
-    [router],
+    [router, onHistoryMutated],
   )
+
+  const renderRowCards = (items: HistoryRow[]) => (
+    <ul className="space-y-2">
+      {items.map(tx => (
+        <HistoryRowCard
+          key={tx.key}
+          tx={tx}
+          projectOptions={projectOptions}
+          busy={busy}
+          editingKey={editingKey}
+          setEditingKey={setEditingKey}
+          onDelete={onDelete}
+          onSaveStock={onSaveStock}
+          onSaveInv={onSaveInv}
+        />
+      ))}
+    </ul>
+  )
+
+  if (groupBy === 'flat') {
+    if (rows.length === 0) {
+      return <p className="text-sm text-slate-500">기록이 없습니다.</p>
+    }
+    return renderRowCards(rows)
+  }
 
   return (
     <ProjectHistoryAccordion
       groups={groups}
       emptyMessage="기록이 없습니다."
       headerAction={projectKey => <ProjectHeaderActions projectName={projectKey} />}
-      renderItems={items => (
-        <ul className="space-y-2">
-          {items.map(tx => (
-            <HistoryRowCard
-              key={tx.key}
-              tx={tx}
-              projectOptions={projectOptions}
-              busy={busy}
-              editingKey={editingKey}
-              setEditingKey={setEditingKey}
-              onDelete={onDelete}
-              onSaveStock={onSaveStock}
-              onSaveInv={onSaveInv}
-            />
-          ))}
-        </ul>
-      )}
+      renderItems={items => renderRowCards(items)}
     />
   )
 }
