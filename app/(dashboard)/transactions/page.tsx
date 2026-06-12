@@ -78,9 +78,15 @@ export default async function TransactionsPage() {
             href="/api/transactions/export"
             className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
           >
-            입출고 이력 다운로드
+            전체 이력
           </a>
-          <span className="text-xs text-slate-500">화면은 200건, 엑셀은 유형별 최대 5,000건까지.</span>
+          <a
+            href="/api/transactions/export?mode=by-item"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            제품별 시트
+          </a>
+          <span className="text-xs text-slate-500 w-full sm:w-auto">화면 200건 · 엑셀 최대 5,000건/유형</span>
         </div>
       </div>
 

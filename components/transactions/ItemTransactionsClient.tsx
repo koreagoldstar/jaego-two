@@ -7,7 +7,7 @@ import {
   mergeHistoryRows,
 } from '@/lib/transactions/mapHistoryRows'
 import { createClient } from '@/lib/supabase/client'
-import { Loader2, Package, Search } from 'lucide-react'
+import { Download, Loader2, Package, Search } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
@@ -161,10 +161,10 @@ export function ItemTransactionsClient({ items, projectOptions, initialItemId }:
       </div>
 
       {selected ? (
-        <div className="rounded-2xl bg-slate-900 text-white p-4 shadow-md">
+        <div className="rounded-2xl bg-slate-900 text-white p-4 shadow-md space-y-3">
           <div className="flex items-start gap-3">
             <Package className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[11px] text-slate-400 uppercase tracking-wide">선택된 제품</p>
               <p className="text-lg font-bold truncate">{selected.name}</p>
               <p className="text-sm text-slate-300 mt-1">
@@ -173,6 +173,13 @@ export function ItemTransactionsClient({ items, projectOptions, initialItemId }:
               </p>
             </div>
           </div>
+          <a
+            href={`/api/transactions/export?itemId=${encodeURIComponent(selected.id)}`}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/20 px-3 py-2 text-sm text-white"
+          >
+            <Download className="w-4 h-4" />
+            이 제품 이력 엑셀 다운로드
+          </a>
         </div>
       ) : (
         <p className="text-sm text-slate-500 rounded-2xl border border-dashed border-slate-300 p-6 text-center bg-white">

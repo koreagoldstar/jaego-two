@@ -45,8 +45,27 @@ export default async function TransactionsByItemPage({
             ← 전체 입출고 이력
           </Link>
         </p>
-        <h1 className="text-xl font-bold text-slate-900">제품별 입출고 이력</h1>
-        <p className="text-sm text-slate-500">제품을 검색·선택하면 해당 품목의 입·출고 내역만 모아서 볼 수 있습니다.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">제품별 입출고 이력</h1>
+            <p className="text-sm text-slate-500">제품을 검색·선택하면 해당 품목의 입·출고 내역만 모아서 볼 수 있습니다.</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 flex flex-wrap items-center gap-2 shrink-0">
+            <span className="text-sm font-medium text-slate-800">엑셀</span>
+            <a
+              href="/api/transactions/export"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              전체 이력
+            </a>
+            <a
+              href="/api/transactions/export?mode=by-item"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              제품별 시트
+            </a>
+          </div>
+        </div>
       </div>
 
       <Suspense fallback={<div className="text-center text-slate-500 py-8">로딩…</div>}>
