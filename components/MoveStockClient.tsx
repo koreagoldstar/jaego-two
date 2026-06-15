@@ -48,6 +48,7 @@ export function MoveStockClient() {
     lotId: string | null
   } | null>(null)
   const [outConfirmPending, setOutConfirmPending] = useState(false)
+  const [forceUnplannedOutbound, setForceUnplannedOutbound] = useState(false)
   const [activeUnitScanCode, setActiveUnitScanCode] = useState<string | null>(null)
   const [showPicker, setShowPicker] = useState(false)
 
@@ -215,15 +216,15 @@ export function MoveStockClient() {
       if (hit) {
       const { itemId: id, lotId } = hit
       const selectedProject = project.trim()
-      if (selectedProject) {
+      if (selectedProject && !forceUnplannedOutbound) {
         const allowed = projectItemMap[selectedProject] ?? []
         if (allowed.length > 0 && !allowed.includes(id)) {
-          setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 예정 품목이 아닙니다.` })
+          setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 예정 품목이 아닙니다. 강제 출고를 켜면 진행할 수 있습니다.` })
           return
         }
         const remaining = projectRemainingMap[`${selectedProject}::${id}`]
         if (typeof remaining === 'number' && remaining <= 0) {
-          setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 잔여가 없어 출고할 수 없습니다.` })
+          setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 잔여가 없어 출고할 수 없습니다. 강제 출고를 켜면 진행할 수 있습니다.` })
           return
         }
       }
@@ -233,7 +234,7 @@ export function MoveStockClient() {
       return
     }
     setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
-  }, [items, pendingScan, project, projectItemMap, projectRemainingMap])
+  }, [items, pendingScan, project, projectItemMap, projectRemainingMap, forceUnplannedOutbound])
 
   resolveRef.current = resolveBarcode
 
@@ -268,17 +269,19 @@ export function MoveStockClient() {
     if (!selectedProject || !selectedId) return null
     return projectRemainingMap[`${selectedProject}::${selectedId}`] ?? null
   }, [selectedProject, selectedId, projectRemainingMap])
-  const outBlockedByRemaining = selectedProject && selectedRemaining !== null && selectedRemaining <= 0
+  const outBlockedByRemaining =
+    !forceUnplannedOutbound && selectedProject && selectedRemaining !== null && selectedRemaining <= 0
   const projectItems = useMemo(() => {
     if (!selectedProject) return []
     const ids = new Set(projectItemMap[selectedProject] ?? [])
     return items.filter(i => {
       if (!ids.has(i.id)) return false
+      if (forceUnplannedOutbound) return true
       const remaining = projectRemainingMap[`${selectedProject}::${i.id}`]
       return typeof remaining !== 'number' || remaining > 0
     })
-  }, [selectedProject, projectItemMap, projectRemainingMap, items])
-  const pickerItems = selectedProject ? projectItems : items
+  }, [selectedProject, projectItemMap, projectRemainingMap, items, forceUnplannedOutbound])
+  const pickerItems = selectedProject && !forceUnplannedOutbound ? projectItems : items
   const availableUnits = useMemo(
     () => (selectedId ? lotsByItem[selectedId] ?? [] : []),
     [selectedId, lotsByItem]
@@ -474,7 +477,9 @@ export function MoveStockClient() {
       ) : pickerItems.length === 0 ? (
         <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/80 p-6 text-center text-sm text-slate-600">
           {selectedProject
-            ? '선택한 프로젝트에 연결된 품목이 없습니다. 프로젝트 예정 품목을 먼저 등록하세요.'
+            ? forceUnplannedOutbound
+              ? '등록된 품목이 없습니다.'
+              : '선택한 프로젝트에 연결된 품목이 없습니다. 프로젝트 예정 품목을 등록하거나 강제 출고를 켜세요.'
             : '등록된 품목이 없습니다. 재고 메뉴에서 품목을 먼저 등록한 뒤 다시 오세요.'}
         </div>
       ) : (
@@ -573,9 +578,20 @@ export function MoveStockClient() {
         </datalist>
         {selectedProject && (
           <p className="text-xs text-slate-500">
-            프로젝트 품목 {projectItems.length}개가 연동됩니다. 스캔 시 해당 품목만 출고 선택됩니다.
+            {forceUnplannedOutbound
+              ? '강제 출고 ON: 예정·잔여와 관계없이 모든 품목을 출고할 수 있습니다.'
+              : `프로젝트 품목 ${projectItems.length}개가 연동됩니다. 스캔 시 해당 품목만 출고 선택됩니다.`}
           </p>
         )}
+        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={forceUnplannedOutbound}
+            onChange={e => setForceUnplannedOutbound(e.target.checked)}
+            className="rounded border-slate-300"
+          />
+          예정 외 품목 강제 출고 허용
+        </label>
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">

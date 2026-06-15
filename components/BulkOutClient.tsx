@@ -48,6 +48,7 @@ export function BulkOutClient() {
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
   const [bucket, setBucket] = useState<Record<string, ScanBucket>>({})
   const [bulkOutConfirmPending, setBulkOutConfirmPending] = useState(false)
+  const [forceUnplannedOutbound, setForceUnplannedOutbound] = useState(false)
   const resolveRef = useRef<(code: string) => Promise<void>>(async () => {})
   const submittingRef = useRef(false)
 
@@ -140,10 +141,10 @@ export function BulkOutClient() {
       const id = hit.itemId
       const lotId = hit.lotId ?? null
       const selectedProject = project.trim()
-      if (selectedProject) {
+      if (selectedProject && !forceUnplannedOutbound) {
         const allowed = projectItemMap[selectedProject] ?? []
         if (allowed.length > 0 && !allowed.includes(id)) {
-          setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 예정 품목이 아닙니다.` })
+          setMsg({ type: 'err', text: `이 품목은 프로젝트 "${selectedProject}" 예정 품목이 아닙니다. 강제 출고를 켜면 진행할 수 있습니다.` })
           return
         }
       }
@@ -156,7 +157,7 @@ export function BulkOutClient() {
 
       setPendingScan({ code: trimmed, itemId: id, itemName: item.name, lotId })
     },
-    [items, pendingScan, project, projectItemMap]
+    [items, pendingScan, project, projectItemMap, forceUnplannedOutbound]
   )
 
   resolveRef.current = resolveBarcode
@@ -416,9 +417,20 @@ export function BulkOutClient() {
         </datalist>
         {project.trim() && (
           <p className="text-xs text-slate-500">
-            프로젝트 품목만 스캔 등록됩니다. 다른 품목 QR은 자동 차단됩니다.
+            {forceUnplannedOutbound
+              ? '강제 출고 ON: 예정에 없는 품목도 스캔·출고할 수 있습니다.'
+              : '프로젝트 품목만 스캔 등록됩니다. 다른 품목 QR은 자동 차단됩니다.'}
           </p>
         )}
+        <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={forceUnplannedOutbound}
+            onChange={e => setForceUnplannedOutbound(e.target.checked)}
+            className="rounded border-slate-300"
+          />
+          예정 외 품목 강제 출고 허용
+        </label>
         <label className="block text-sm font-medium text-slate-700">메모 (선택)</label>
         <input
           value={note}

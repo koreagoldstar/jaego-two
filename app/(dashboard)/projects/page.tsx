@@ -1,8 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
+import { buildOutboundReconcileReport } from '@/lib/projects/outboundReconcile'
 import { buildCompletedProjectSet, splitProjectNames } from '@/lib/projects/projectStatus'
 import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
+import { buildShippedMap } from '@/lib/stockOverview'
 import type { Item } from '@/lib/supabase/types'
 import { ProjectOutboundHistory } from '@/components/projects/ProjectOutboundHistory'
+import { ProjectOutboundReconcilePanel } from '@/components/projects/ProjectOutboundReconcilePanel'
 import { ProjectPlanMultiForm } from '@/components/projects/ProjectPlanMultiForm'
 import { ProjectPlanSection } from '@/components/projects/ProjectPlanSection'
 import { normalizeProjectGroupKey } from '@/lib/history/groupByProject'
@@ -32,7 +35,7 @@ export default async function ProjectsPage() {
   } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [itemsRes, planRes, txRes, statusRes] = await Promise.all([
+  const [itemsRes, planRes, txDisplayRes, txAggRes, statusRes] = await Promise.all([
     supabase.from('items').select('id, name, quantity').eq('user_id', user.id).order('name'),
     supabase
       .from('project_usage_plans')
@@ -47,6 +50,11 @@ export default async function ProjectsPage() {
       .order('created_at', { ascending: false })
       .limit(500),
     supabase
+      .from('stock_transactions')
+      .select('id, created_at, project, item_id, direction, amount')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true }),
+    supabase
       .from('project_status')
       .select('project_name, completed_at')
       .eq('user_id', user.id)
@@ -55,7 +63,8 @@ export default async function ProjectsPage() {
 
   const items = (itemsRes.data ?? []) as Item[]
   const plans = (planRes.data ?? []) as unknown as PlanRow[]
-  const txRows = (txRes.data ?? []) as TxRow[]
+  const txRows = (txDisplayRes.data ?? []) as TxRow[]
+  const txAggRows = txAggRes.data ?? []
   const statusRows = (statusRes.data ?? []) as ProjectStatusRow[]
   const itemById = new Map(items.map(item => [item.id, item] as const))
   const completedSet = buildCompletedProjectSet(statusRows)
@@ -64,7 +73,7 @@ export default async function ProjectsPage() {
   const planError = planRes.error
   const statusMissing = statusRes.error?.message?.toLowerCase().includes('project_status')
 
-  if (itemsRes.error || planError || txRes.error) {
+  if (itemsRes.error || planError || txDisplayRes.error || txAggRes.error) {
     return (
       <div className="space-y-4">
         <div>
@@ -74,20 +83,18 @@ export default async function ProjectsPage() {
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {planError?.message?.includes('project_usage_plans')
             ? 'DB 마이그레이션(005_project_usage_plans.sql)이 아직 적용되지 않았습니다. Supabase SQL Editor에서 먼저 실행해주세요.'
-            : planError?.message ?? itemsRes.error?.message ?? txRes.error?.message ?? '알 수 없는 오류'}
+            : planError?.message ??
+              itemsRes.error?.message ??
+              txDisplayRes.error?.message ??
+              txAggRes.error?.message ??
+              '알 수 없는 오류'}
         </div>
       </div>
     )
   }
 
-  const shippedMap = new Map<string, number>()
-  for (const tx of txRows) {
-    const project = (tx.project ?? '').trim()
-    if (!project) continue
-    const k = `${project}::${tx.item_id}`
-    const delta = tx.direction === 'out' ? tx.amount : -tx.amount
-    shippedMap.set(k, (shippedMap.get(k) ?? 0) + delta)
-  }
+  const shippedMap = buildShippedMap(txAggRows)
+  const reconcileReport = buildOutboundReconcileReport(plans, txAggRows, completedSet)
 
   const grouped = new Map<string, Array<PlanRow & { shipped: number; remaining: number }>>()
   const projectInstallDate = new Map<string, string | null>()
@@ -149,6 +156,8 @@ export default async function ProjectsPage() {
           프로젝트 완료 기능 DB(017_project_completion.sql)가 아직 없습니다. Supabase SQL Editor에서 실행해주세요.
         </div>
       )}
+
+      <ProjectOutboundReconcilePanel report={reconcileReport} projectOptions={allProjectNames} />
 
       <ProjectPlanMultiForm
         items={itemOptions}

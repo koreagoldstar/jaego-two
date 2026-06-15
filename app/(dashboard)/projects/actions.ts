@@ -1,5 +1,13 @@
 'use server'
 
+import {
+  computeForceOutboundAssignments,
+  computeOutboundAssignments,
+  type ReconcilePlanRow,
+  type ReconcileTxRow,
+} from '@/lib/projects/outboundReconcile'
+import { buildCompletedProjectSet } from '@/lib/projects/projectStatus'
+import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
 import { revalidateInventoryViews } from '@/lib/projects/revalidateViews'
 import { createClient } from '@/lib/supabase/server'
 
@@ -324,4 +332,93 @@ export async function deleteProjectAction(formData: FormData) {
 
   revalidateProjectViews()
   return { ok: true as const }
+}
+
+export async function reconcileProjectOutboundAction() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
+
+  const [planRes, txRes, statusRes] = await Promise.all([
+    supabase
+      .from('project_usage_plans')
+      .select('project_name, item_id, planned_qty, install_date')
+      .eq('user_id', user.id),
+    supabase
+      .from('stock_transactions')
+      .select('id, project, item_id, direction, amount, created_at')
+      .eq('user_id', user.id),
+    supabase.from('project_status').select('project_name, completed_at').eq('user_id', user.id),
+  ])
+
+  if (planRes.error) return { ok: false as const, error: planRes.error.message }
+  if (txRes.error) return { ok: false as const, error: txRes.error.message }
+
+  const plans = (planRes.data ?? []) as ReconcilePlanRow[]
+  const transactions = (txRes.data ?? []) as ReconcileTxRow[]
+  const completedProjects = buildCompletedProjectSet((statusRes.data ?? []) as ProjectStatusRow[])
+  const assignments = computeOutboundAssignments(plans, transactions, completedProjects)
+
+  if (assignments.length === 0) {
+    return { ok: true as const, matched: 0 }
+  }
+
+  const results = await Promise.all(
+    assignments.map(({ txId, project }) =>
+      supabase.from('stock_transactions').update({ project }).eq('user_id', user.id).eq('id', txId),
+    ),
+  )
+
+  const failed = results.find(r => r.error)
+  if (failed?.error) return { ok: false as const, error: failed.error.message }
+
+  revalidateProjectViews()
+  return { ok: true as const, matched: assignments.length }
+}
+
+export async function reconcileProjectOutboundForceAction(formData: FormData) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
+
+  const project_name = String(formData.get('project_name') ?? '').trim()
+  if (!project_name) return { ok: false as const, error: '프로젝트를 선택하세요' }
+
+  const [planRes, txRes] = await Promise.all([
+    supabase
+      .from('project_usage_plans')
+      .select('project_name, item_id, planned_qty, install_date')
+      .eq('user_id', user.id),
+    supabase
+      .from('stock_transactions')
+      .select('id, project, item_id, direction, amount, created_at')
+      .eq('user_id', user.id),
+  ])
+
+  if (planRes.error) return { ok: false as const, error: planRes.error.message }
+  if (txRes.error) return { ok: false as const, error: txRes.error.message }
+
+  const plans = (planRes.data ?? []) as ReconcilePlanRow[]
+  const transactions = (txRes.data ?? []) as ReconcileTxRow[]
+  const assignments = computeForceOutboundAssignments(plans, transactions, project_name)
+
+  if (assignments.length === 0) {
+    return { ok: true as const, matched: 0 }
+  }
+
+  const results = await Promise.all(
+    assignments.map(({ txId, project }) =>
+      supabase.from('stock_transactions').update({ project }).eq('user_id', user.id).eq('id', txId),
+    ),
+  )
+
+  const failed = results.find(r => r.error)
+  if (failed?.error) return { ok: false as const, error: failed.error.message }
+
+  revalidateProjectViews()
+  return { ok: true as const, matched: assignments.length }
 }
