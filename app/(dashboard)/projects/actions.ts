@@ -15,6 +15,43 @@ function revalidateProjectViews() {
   revalidateInventoryViews()
 }
 
+export async function updateProjectMetaAction(formData: FormData) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
+
+  const old_name = String(formData.get('old_name') ?? '').trim()
+  const new_name = String(formData.get('new_name') ?? '').trim() || old_name
+  const install_date = String(formData.get('install_date') ?? '').trim() || null
+
+  if (!old_name) return { ok: false as const, error: '기존 프로젝트명이 없습니다' }
+  if (!new_name) return { ok: false as const, error: '프로젝트명을 입력하세요' }
+
+  if (new_name !== old_name) {
+    const renameRes = await renameProjectAction(
+      (() => {
+        const fd = new FormData()
+        fd.set('old_name', old_name)
+        fd.set('new_name', new_name)
+        return fd
+      })(),
+    )
+    if (!renameRes.ok) return renameRes
+  }
+
+  const { error: dateError } = await supabase
+    .from('project_usage_plans')
+    .update({ install_date })
+    .eq('user_id', user.id)
+    .eq('project_name', new_name)
+  if (dateError) return { ok: false as const, error: dateError.message }
+
+  revalidateProjectViews()
+  return { ok: true as const }
+}
+
 export async function renameProjectAction(formData: FormData) {
   const supabase = await createClient()
   const {

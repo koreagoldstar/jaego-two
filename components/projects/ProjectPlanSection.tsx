@@ -48,7 +48,7 @@ export function ProjectPlanSection({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-base font-semibold text-slate-900">{projectName}</h2>
-            <ProjectRenameInline projectName={projectName} />
+            <ProjectRenameInline projectName={projectName} installDate={installDate} />
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             설치 일정: {installDate || '미정'}
