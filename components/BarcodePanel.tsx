@@ -194,17 +194,30 @@ function buildPrintIframeStyles(
         gap: 0.15mm;
         overflow: hidden;
       }
-      .label-text-col .caption,
-      .label-text-col .meta {
-        font-size: 3.2pt;
-        line-height: 1.08;
+      .label-text-col .caption {
+        font-size: 7pt;
+        font-weight: 600;
+        line-height: 1.1;
         text-align: left;
         white-space: normal;
-        word-break: break-all;
+        word-break: break-word;
         overflow: hidden;
         display: -webkit-box;
         -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
+        margin: 0;
+      }
+      .label-text-col .meta {
+        font-size: 6pt;
+        line-height: 1.1;
+        text-align: left;
+        white-space: normal;
+        word-break: break-word;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        margin: 0;
       }
     `
       : ''
@@ -467,8 +480,10 @@ function BarcodeStrip({
 
   const captionBlock = caption ? (
     <p
-      className={`font-medium text-slate-700 px-1 ${
-        microQr ? 'text-[10px] leading-tight break-all' : 'text-xs print:text-[7pt] text-center max-w-full truncate'
+      className={`font-semibold text-slate-800 px-1 ${
+        microQr
+          ? 'text-[13px] leading-snug break-words line-clamp-3'
+          : 'text-xs print:text-[7pt] text-center max-w-full truncate'
       }`}
     >
       {caption}
@@ -478,8 +493,8 @@ function BarcodeStrip({
   const metaBlock =
     normalizedMeta.length > 0 ? (
       <div
-        className={`text-slate-600 leading-tight px-1 space-y-0.5 ${
-          microQr ? 'text-[10px]' : 'text-[11px] print:text-[6.5pt] text-center'
+        className={`text-slate-600 leading-snug px-1 space-y-0.5 ${
+          microQr ? 'text-[12px] break-words' : 'text-[11px] print:text-[6.5pt] text-center'
         }`}
       >
         {normalizedMeta.map(line => (
