@@ -9,6 +9,7 @@ import { ItemUnitOutClient } from '@/components/items/ItemUnitOutClient'
 import { ItemStockLegacyClient } from '@/components/items/ItemStockLegacyClient'
 import { ItemStockLotsClient } from '@/components/items/ItemStockLotsClient'
 import { ItemStockReconcileClient } from '@/components/items/ItemStockReconcileClient'
+import { ItemStockAlignButton } from '@/components/items/ItemStockAlignButton'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { Pencil } from 'lucide-react'
 
@@ -126,7 +127,10 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
       </div>
 
       <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm space-y-3">
-        <h2 className="text-base font-semibold text-slate-900">재고 대사 모드</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-slate-900">재고 대사 · QR 보정</h2>
+          <ItemStockAlignButton itemId={item.id} />
+        </div>
         {lotsTableMissing ? (
           <p className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
             입고 단위 테이블(item_stock_lots)을 찾을 수 없어 재고 대사 모드를 사용할 수 없습니다. 마이그레이션(007·009)을

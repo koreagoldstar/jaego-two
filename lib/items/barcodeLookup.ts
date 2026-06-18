@@ -122,10 +122,11 @@ async function findActiveLotBySuffixIndex(
   userId: string,
   itemId: string,
   suffixIndex: number,
+  preferredCode?: string,
 ): Promise<string | null> {
   const { data: lots } = await supabase
     .from('item_stock_lots')
-    .select('id, lot_code')
+    .select('id, lot_code, created_at')
     .eq('user_id', userId)
     .eq('item_id', itemId)
     .gt('quantity', 0)
@@ -133,8 +134,18 @@ async function findActiveLotBySuffixIndex(
   const matches = (lots ?? []).filter(
     row => parseUnitSuffixIndex((row.lot_code ?? '').trim()) === suffixIndex,
   )
+  if (matches.length === 0) return null
+
+  const pref = preferredCode?.trim().toLowerCase()
+  if (pref) {
+    const exact = matches.find(m => (m.lot_code ?? '').trim().toLowerCase() === pref)
+    if (exact?.id) return exact.id
+  }
+
   if (matches.length === 1) return matches[0].id ?? null
-  return null
+
+  matches.sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? '') || (a.id ?? '').localeCompare(b.id ?? ''))
+  return matches[0].id ?? null
 }
 
 async function findSingleActiveLotForItem(
@@ -240,12 +251,12 @@ export async function findItemByBarcode(
     if (!strictUnitQr) {
       const suffixIndex = parseUnitSuffixIndex(code)
       if (suffixIndex !== null) {
-        const bySuffix = await findActiveLotBySuffixIndex(supabase, userId, itemId, suffixIndex)
+        const bySuffix = await findActiveLotBySuffixIndex(supabase, userId, itemId, suffixIndex, code)
         if (bySuffix) return { itemId, lotId: bySuffix }
+      } else {
+        const onlyLot = await findSingleActiveLotForItem(supabase, userId, itemId)
+        if (onlyLot) return { itemId, lotId: onlyLot }
       }
-
-      const onlyLot = await findSingleActiveLotForItem(supabase, userId, itemId)
-      if (onlyLot) return { itemId, lotId: onlyLot }
     }
 
     const { data: lots } = await supabase

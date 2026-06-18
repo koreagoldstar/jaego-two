@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { prepareOutboundLotAction } from '@/app/(dashboard)/move/actions'
 import {
   ALREADY_SHIPPED_MESSAGE,
   UNIT_NOT_IN_STOCK_MESSAGE,
-  UNIT_QR_MISMATCH_MESSAGE,
   findItemByBarcode,
 } from '@/lib/items/barcodeLookup'
 import { parseUnitSuffixIndex } from '@/lib/items/lotCodes'
@@ -116,7 +116,7 @@ export function BulkOutClient() {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const hit = await findItemByBarcode(supabase, user.id, trimmed, { strictUnitQr: true })
+      const hit = await findItemByBarcode(supabase, user.id, trimmed)
       if (hit?.alreadyShipped) {
         window.alert(ALREADY_SHIPPED_MESSAGE)
         setMsg({ type: 'err', text: ALREADY_SHIPPED_MESSAGE })
@@ -127,19 +127,21 @@ export function BulkOutClient() {
         setMsg({ type: 'err', text: UNIT_NOT_IN_STOCK_MESSAGE })
         return
       }
-      if (hit?.unitMismatch) {
-        setMsg({
-          type: 'err',
-          text: `${UNIT_QR_MISMATCH_MESSAGE} (라벨 QR이 DB와 다릅니다. 품목 상세에서 lot 코드를 확인하세요.)`,
-        })
-        return
-      }
       if (!hit) {
         setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
         return
       }
       const id = hit.itemId
-      const lotId = hit.lotId ?? null
+      let lotId = hit.lotId ?? null
+      if (!lotId && parseUnitSuffixIndex(trimmed) !== null) {
+        const prep = await prepareOutboundLotAction(id, trimmed)
+        if (!prep.ok) {
+          setMsg({ type: 'err', text: prep.error })
+          return
+        }
+        lotId = prep.lotId
+        if (prep.adjusted) await load()
+      }
       const selectedProject = project.trim()
       if (selectedProject && !forceUnplannedOutbound) {
         const allowed = projectItemMap[selectedProject] ?? []
@@ -279,7 +281,7 @@ export function BulkOutClient() {
     try {
       for (const row of rows) {
         for (const scan of row.scans) {
-          const hit = await findItemByBarcode(supabase, user.id, scan.code, { strictUnitQr: true })
+          const hit = await findItemByBarcode(supabase, user.id, scan.code)
           if (hit?.alreadyShipped) {
             failed.push(`${row.item.name} · ${scan.code} (이미 출고됨)`)
             continue
@@ -288,12 +290,24 @@ export function BulkOutClient() {
             failed.push(`${row.item.name} · ${scan.code} (재고 없음)`)
             continue
           }
-          if (hit?.unitMismatch) {
-            failed.push(`${row.item.name} · ${scan.code} (QR 불일치)`)
+          if (!hit) {
+            failed.push(`${row.item.name} · ${scan.code} (미등록 코드)`)
             continue
           }
 
-          const lotId = hit?.lotId ?? scan.lotId
+          let lotId = hit.lotId ?? scan.lotId
+          if (!lotId) {
+            const prep = await prepareOutboundLotAction(row.item.id, scan.code)
+            if (!prep.ok) {
+              failed.push(`${row.item.name} · ${scan.code} (${prep.error})`)
+              continue
+            }
+            lotId = prep.lotId
+          }
+          if (!lotId) {
+            failed.push(`${row.item.name} · ${scan.code} (lot 연결 실패)`)
+            continue
+          }
           const noteParts = ['[일괄출고]', note.trim(), `스캔:${scan.code.trim()}`].filter(Boolean)
           const { error } = await supabase.rpc('apply_stock_move', {
             p_item_id: row.item.id,
@@ -344,7 +358,7 @@ export function BulkOutClient() {
   return (
     <div className="space-y-4">
       <p className="text-center text-xs text-slate-500 leading-relaxed px-1">
-        여러 제품 QR을 연속으로 찍고 프로젝트 1개로 일괄 출고합니다. 스캔한 QR 번호가 출고 이력에 그대로 기록됩니다.
+        여러 제품 QR을 연속으로 찍고 프로젝트 1개로 일괄 출고합니다. 라벨 QR 기준으로 출고하며 DB 번호가 다르면 자동 맞춥니다.
       </p>
 
       <BarcodeCamera

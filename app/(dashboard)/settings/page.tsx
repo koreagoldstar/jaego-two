@@ -1,4 +1,5 @@
 import { SignOutButton } from '@/components/SignOutButton'
+import { StockLotsAlignPanel } from '@/components/items/StockLotsAlignPanel'
 import { Download, FileText } from 'lucide-react'
 import Link from 'next/link'
 
@@ -33,6 +34,8 @@ export default function SettingsPage() {
           Supabase 대시보드
         </a>
       </div>
+
+      <StockLotsAlignPanel />
 
       <p className="text-xs text-slate-500">
         백업은 브라우저에서 로그인된 계정 기준으로만 포함됩니다. 복원은 Supabase SQL/대시보드 또는 별도 도구가 필요할 수 있습니다.{' '}

@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { prepareOutboundLotAction } from '@/app/(dashboard)/move/actions'
 import {
   ALREADY_SHIPPED_MESSAGE,
   UNIT_NOT_IN_STOCK_MESSAGE,
-  UNIT_QR_MISMATCH_MESSAGE,
   findItemByBarcode,
 } from '@/lib/items/barcodeLookup'
 import { parseUnitSuffixIndex } from '@/lib/items/lotCodes'
@@ -16,6 +16,7 @@ import {
   wasRecentlyOutboundScanned,
 } from '@/lib/items/recentUnitScan'
 import { buildStockUnitOptions, formatStockUnitLabel, type StockUnitOption } from '@/lib/items/stockUnits'
+import { formatMissingUnitScanMessage, resolveScanLotId } from '@/lib/items/resolveScanLot'
 import type { Item, ItemStockLot } from '@/lib/supabase/types'
 import { StockUnitPicker } from '@/components/stock/StockUnitPicker'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
@@ -210,11 +211,41 @@ export function MoveStockClient() {
         setMsg({ type: 'err', text: UNIT_NOT_IN_STOCK_MESSAGE })
         return
       }
-      if (hit?.unitMismatch) {
-        setMsg({ type: 'err', text: UNIT_QR_MISMATCH_MESSAGE })
+
+      let lotId = hit?.lotId ?? null
+      let unitMismatch = hit?.unitMismatch ?? false
+      if (hit?.itemId) {
+        const units = lotsByItem[hit.itemId] ?? []
+        if (!lotId) {
+          lotId = resolveScanLotId(trimmed, units)
+        }
+        if (!lotId && parseUnitSuffixIndex(trimmed) !== null) {
+          const prep = await prepareOutboundLotAction(hit.itemId, trimmed)
+          if (prep.ok) {
+            lotId = prep.lotId
+            unitMismatch = false
+            if (prep.adjusted) {
+              setMsg({ type: 'ok', text: `라벨 QR 기준으로 재고 번호를 맞췄습니다: ${trimmed}` })
+              await load()
+            }
+          } else {
+            setMsg({
+              type: 'err',
+              text: formatMissingUnitScanMessage(trimmed, units) ?? prep.error,
+            })
+            return
+          }
+        } else if (unitMismatch) {
+          setMsg({
+            type: 'err',
+            text: formatMissingUnitScanMessage(trimmed, units) ?? '라벨 QR과 재고 단위가 맞지 않습니다.',
+          })
+          return
+        }
       }
+
       if (hit) {
-      const { itemId: id, lotId } = hit
+      const { itemId: id } = hit
       const selectedProject = project.trim()
       if (selectedProject && !forceUnplannedOutbound) {
         const allowed = projectItemMap[selectedProject] ?? []
@@ -234,7 +265,7 @@ export function MoveStockClient() {
       return
     }
     setMsg({ type: 'err', text: `등록되지 않은 코드: ${trimmed}` })
-  }, [items, pendingScan, project, projectItemMap, projectRemainingMap, forceUnplannedOutbound])
+  }, [items, pendingScan, project, projectItemMap, projectRemainingMap, forceUnplannedOutbound, lotsByItem, load])
 
   resolveRef.current = resolveBarcode
 
@@ -292,10 +323,23 @@ export function MoveStockClient() {
   )
   const outRequiresUnitPick = availableUnits.length > 0
 
-  function confirmPendingScan() {
+  async function confirmPendingScan() {
     if (!pendingScan) return
     setSelectedId(pendingScan.itemId)
-    if (pendingScan.lotId) setSelectedLotId(pendingScan.lotId)
+    let lotId = pendingScan.lotId
+    if (!lotId) {
+      lotId = resolveScanLotId(pendingScan.code, lotsByItem[pendingScan.itemId] ?? [])
+    }
+    if (!lotId && parseUnitSuffixIndex(pendingScan.code) !== null) {
+      const prep = await prepareOutboundLotAction(pendingScan.itemId, pendingScan.code)
+      if (!prep.ok) {
+        setMsg({ type: 'err', text: prep.error })
+        return
+      }
+      lotId = prep.lotId
+      if (prep.adjusted) await load()
+    }
+    if (lotId) setSelectedLotId(lotId)
     setActiveUnitScanCode(
       parseUnitSuffixIndex(pendingScan.code) !== null ? pendingScan.code : null,
     )
@@ -319,7 +363,7 @@ export function MoveStockClient() {
       setMsg({ type: 'err', text: '프로젝트 예정 잔여가 0 이하라 출고할 수 없습니다.' })
       return
     }
-    if (outRequiresUnitPick && !selectedLotId) {
+    if (outRequiresUnitPick && !selectedLotId && !activeUnitScanCode) {
       setMsg({ type: 'err', text: '출고할 재고 단위를 선택하세요.' })
       return
     }
@@ -355,6 +399,20 @@ export function MoveStockClient() {
     submittingRef.current = true
     setBusy(true)
     try {
+      let lotIdForOut = selectedLotId
+      if (direction === 'out' && !lotIdForOut && activeUnitScanCode) {
+        const prep = await prepareOutboundLotAction(selectedId, activeUnitScanCode)
+        if (!prep.ok) {
+          setMsg({ type: 'err', text: prep.error })
+          return
+        }
+        lotIdForOut = prep.lotId
+      }
+      if (direction === 'out' && outRequiresUnitPick && !lotIdForOut && !activeUnitScanCode) {
+        setMsg({ type: 'err', text: '출고할 재고 단위를 선택하세요.' })
+        return
+      }
+
       const supabase = createClient()
       const { data, error } = await supabase.rpc('apply_stock_move', {
         p_item_id: selectedId,
@@ -362,7 +420,7 @@ export function MoveStockClient() {
         p_amount: 1,
         p_note: note.trim() || null,
         p_project: project.trim() || null,
-        ...(direction === 'out' && selectedLotId ? { p_lot_id: selectedLotId } : {}),
+        ...(direction === 'out' && lotIdForOut ? { p_lot_id: lotIdForOut } : {}),
       })
       if (error) {
         setMsg({ type: 'err', text: error.message })
@@ -399,7 +457,7 @@ export function MoveStockClient() {
   return (
     <div className="space-y-4">
       <p className="text-center text-xs text-slate-500 leading-relaxed px-1">
-        QR을 스캔하면 품목·단위가 잡힙니다. 입고/출고는 스캔 1회당 1건씩 처리됩니다.
+        QR을 스캔하면 붙어 있는 라벨 번호 기준으로 출고합니다. DB 번호가 다르면 자동으로 맞춘 뒤 출고합니다.
       </p>
 
       <BarcodeCamera
