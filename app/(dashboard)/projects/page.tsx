@@ -1,11 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
-import { buildOutboundReconcileReport } from '@/lib/projects/outboundReconcile'
 import { buildCompletedProjectSet, splitProjectNames } from '@/lib/projects/projectStatus'
 import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
 import { buildShippedMap } from '@/lib/stockOverview'
 import type { Item } from '@/lib/supabase/types'
 import { ProjectOutboundHistory } from '@/components/projects/ProjectOutboundHistory'
-import { ProjectOutboundReconcilePanel } from '@/components/projects/ProjectOutboundReconcilePanel'
 import { ProjectPlanMultiForm } from '@/components/projects/ProjectPlanMultiForm'
 import { ProjectPlanSection } from '@/components/projects/ProjectPlanSection'
 import { normalizeProjectGroupKey } from '@/lib/history/groupByProject'
@@ -94,7 +92,6 @@ export default async function ProjectsPage() {
   }
 
   const shippedMap = buildShippedMap(txAggRows)
-  const reconcileReport = buildOutboundReconcileReport(plans, txAggRows, completedSet)
 
   const grouped = new Map<string, Array<PlanRow & { shipped: number; remaining: number }>>()
   const projectInstallDate = new Map<string, string | null>()
@@ -156,8 +153,6 @@ export default async function ProjectsPage() {
           프로젝트 완료 기능 DB(017_project_completion.sql)가 아직 없습니다. Supabase SQL Editor에서 실행해주세요.
         </div>
       )}
-
-      <ProjectOutboundReconcilePanel report={reconcileReport} projectOptions={allProjectNames} />
 
       <ProjectPlanMultiForm
         items={itemOptions}

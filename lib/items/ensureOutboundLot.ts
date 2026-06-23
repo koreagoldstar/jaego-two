@@ -37,15 +37,11 @@ async function findActiveLotIdByCode(
   return null
 }
 
-async function wasCodeAlreadyShipped(
+async function fetchShippedLotCodesLower(
   supabase: SupabaseClient,
   userId: string,
   itemId: string,
-  lotCode: string,
-): Promise<boolean> {
-  const active = await findActiveLotIdByCode(supabase, userId, itemId, lotCode)
-  if (active) return false
-
+): Promise<Set<string>> {
   const { data: outs } = await supabase
     .from('stock_transactions')
     .select('lot_code')
@@ -57,13 +53,58 @@ async function wasCodeAlreadyShipped(
     .order('created_at', { ascending: false })
     .limit(2000)
 
-  const target = lotCode.trim().toLowerCase()
-  return (outs ?? []).some(row =>
-    (row.lot_code ?? '')
-      .split(',')
-      .map(s => s.trim().toLowerCase())
-      .some(s => s === target),
-  )
+  const shipped = new Set<string>()
+  for (const row of outs ?? []) {
+    for (const part of (row.lot_code ?? '').split(',')) {
+      const trimmed = part.trim().toLowerCase()
+      if (trimmed) shipped.add(trimmed)
+    }
+  }
+  return shipped
+}
+
+async function wasCodeAlreadyShipped(
+  supabase: SupabaseClient,
+  userId: string,
+  itemId: string,
+  lotCode: string,
+  shippedCodesLower?: Set<string>,
+): Promise<boolean> {
+  const active = await findActiveLotIdByCode(supabase, userId, itemId, lotCode)
+  if (active) return false
+
+  const shipped = shippedCodesLower ?? (await fetchShippedLotCodesLower(supabase, userId, itemId))
+  return shipped.has(lotCode.trim().toLowerCase())
+}
+
+type ActiveLotRow = {
+  id: string
+  lot_code: string | null
+  quantity: number
+  created_at: string
+}
+
+/** 이미 출고된 QR 번호는 제외하고, 남은 재고 lot 중 라벨에 맞출 대상 선택 */
+function pickLotToRelabelForScan(
+  rows: ActiveLotRow[],
+  scannedLower: string,
+  shippedCodesLower: Set<string>,
+): ActiveLotRow | null {
+  if (rows.length === 0) return null
+
+  const candidates = rows.filter(r => (r.lot_code ?? '').trim().toLowerCase() !== scannedLower)
+  if (candidates.length === 0) return rows[0]
+
+  const empty = candidates.find(r => !(r.lot_code ?? '').trim())
+  if (empty) return empty
+
+  const orphaned = candidates.find(r => {
+    const code = (r.lot_code ?? '').trim().toLowerCase()
+    return code && shippedCodesLower.has(code)
+  })
+  if (orphaned) return orphaned
+
+  return candidates[0]
 }
 
 /**
@@ -94,7 +135,8 @@ export async function ensureOutboundLotForScan(
   const existingId = await findActiveLotIdByCode(supabase, userId, itemId, code)
   if (existingId) return { ok: true, lotId: existingId, adjusted: false }
 
-  if (await wasCodeAlreadyShipped(supabase, userId, itemId, code)) {
+  const shippedCodesLower = await fetchShippedLotCodesLower(supabase, userId, itemId)
+  if (await wasCodeAlreadyShipped(supabase, userId, itemId, code, shippedCodesLower)) {
     return { ok: false, error: '이미 출고된 QR 번호입니다.' }
   }
 
@@ -107,7 +149,7 @@ export async function ensureOutboundLotForScan(
     .order('created_at', { ascending: true })
     .order('id', { ascending: true })
 
-  const rows = lots ?? []
+  const rows = (lots ?? []) as ActiveLotRow[]
   if (rows.length === 0) {
     return { ok: false, error: '현재 재고에 출고할 단위가 없습니다.' }
   }
@@ -116,16 +158,20 @@ export async function ensureOutboundLotForScan(
   const duplicate = rows.find(r => (r.lot_code ?? '').trim().toLowerCase() === codeLower)
   if (duplicate?.id) return { ok: true, lotId: duplicate.id, adjusted: false }
 
-  const fifo = rows[0]
-  const prev = (fifo.lot_code ?? '').trim()
+  const target = pickLotToRelabelForScan(rows, codeLower, shippedCodesLower)
+  if (!target?.id) {
+    return { ok: false, error: '현재 재고에 출고할 단위가 없습니다.' }
+  }
+
+  const prev = (target.lot_code ?? '').trim()
   if (prev.toLowerCase() === codeLower) {
-    return { ok: true, lotId: fifo.id, adjusted: false }
+    return { ok: true, lotId: target.id, adjusted: false }
   }
 
   const { error: updError } = await supabase
     .from('item_stock_lots')
     .update({ lot_code: code, note: '[라벨출고정합]' })
-    .eq('id', fifo.id)
+    .eq('id', target.id)
     .eq('user_id', userId)
     .eq('item_id', itemId)
 
@@ -136,5 +182,5 @@ export async function ensureOutboundLotForScan(
     return { ok: false, error: updError.message }
   }
 
-  return { ok: true, lotId: fifo.id, adjusted: true }
+  return { ok: true, lotId: target.id, adjusted: true }
 }

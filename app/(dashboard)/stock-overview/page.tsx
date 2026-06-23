@@ -1,9 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Item } from '@/lib/supabase/types'
-import { buildOutboundReconcileReport } from '@/lib/projects/outboundReconcile'
 import { buildCompletedProjectSet } from '@/lib/projects/projectStatus'
 import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
-import { ProjectOutboundReconcilePanel } from '@/components/projects/ProjectOutboundReconcilePanel'
 import { buildStockOverview, type PlanSumRow, type ShippedTxRow } from '@/lib/stockOverview'
 
 export const dynamic = 'force-dynamic'
@@ -39,10 +37,6 @@ export default async function StockOverviewPage({
     tx => (tx.project ?? '').trim() !== '',
   ) as ShippedTxRow[]
   const completedProjects = buildCompletedProjectSet((statusRes.data ?? []) as ProjectStatusRow[])
-  const reconcileReport = buildOutboundReconcileReport(plans, allTxRows, completedProjects)
-  const allProjectNamesForReconcile = Array.from(
-    new Set(plans.map(p => (p.project_name ?? '').trim()).filter(Boolean)),
-  ).sort((a, b) => a.localeCompare(b))
   const selectedProject = (searchParams?.project ?? '').trim()
 
   const { allProjects, rows, totalCurrent, totalPlanned, totalRemain, projectColumns, itemProjectRows } =
@@ -79,8 +73,6 @@ export default async function StockOverviewPage({
           적용
         </button>
       </form>
-
-      <ProjectOutboundReconcilePanel report={reconcileReport} projectOptions={allProjectNamesForReconcile} />
 
       <div className="rounded-xl border border-slate-200 bg-white p-3 flex flex-wrap items-center gap-2">
         <p className="text-sm font-medium text-slate-800 mr-1">엑셀 다운로드</p>

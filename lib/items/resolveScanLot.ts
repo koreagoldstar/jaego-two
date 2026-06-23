@@ -32,8 +32,8 @@ export function formatMissingUnitScanMessage(code: string, units: StockUnitOptio
       : '현재 재고 단위가 없습니다.'
 
   return (
-    `QR #${suffix}번은 DB 재고에 없습니다. ` +
-    `라벨이 오래됐거나 이미 출고됐을 수 있습니다. ${range} ` +
-    `아래 목록에서 실물에 붙은 번호와 맞는 단위를 선택하세요.`
+    `QR #${suffix}번은 현재 재고 목록에 없습니다. ` +
+    `출고 시 라벨 번호에 맞는 재고 단위로 자동 연결됩니다(이미 출고된 번호 제외). ${range} ` +
+    `아래 목록에서 실물에 붙은 번호와 맞는 단위를 선택할 수도 있습니다.`
   )
 }
