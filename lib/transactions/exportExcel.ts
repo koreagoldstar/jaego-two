@@ -1,4 +1,5 @@
 import { formatTransactionQrDisplay } from '@/lib/items/transactionQrDisplay'
+import { formatKstDateTime } from '@/lib/time/formatKst'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { StockTransaction } from '@/lib/supabase/types'
 import * as XLSX from 'xlsx'
@@ -36,7 +37,7 @@ export function linesToAoa(lines: ExportLine[]): unknown[][] {
   return [
     [...EXPORT_HEADERS],
     ...lines.map(l => [
-      new Date(l.created_at).toLocaleString('ko-KR'),
+      formatKstDateTime(l.created_at),
       l.category,
       l.itemName,
       l.qtySigned,

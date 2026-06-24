@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { formatKstDateTime } from '@/lib/time/formatKst'
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
     const aoa = [
       headers,
       ...(txRows ?? []).map(r => [
-        new Date(r.created_at).toLocaleString('ko-KR'),
+        formatKstDateTime(r.created_at),
         installByProject.get((r.project ?? '').trim()) ?? '',
         r.project ?? '',
         itemById.get(r.item_id) ?? '품목',
