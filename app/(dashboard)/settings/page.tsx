@@ -1,5 +1,6 @@
 import { SignOutButton } from '@/components/SignOutButton'
 import { StockLotsAlignPanel } from '@/components/items/StockLotsAlignPanel'
+import { InstallAppCard } from '@/components/InstallAppCard'
 import { Download, FileText } from 'lucide-react'
 import Link from 'next/link'
 
@@ -8,8 +9,10 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-lg">
       <div>
         <h1 className="text-xl font-bold text-slate-900">설정</h1>
-        <p className="text-sm text-slate-500">바로가기, 데이터 백업 및 로그아웃</p>
+        <p className="text-sm text-slate-500">앱 설치, 바로가기, 데이터 백업 및 로그아웃</p>
       </div>
+
+      <InstallAppCard />
 
       <div className="rounded-2xl bg-white border border-slate-200 divide-y divide-slate-100 shadow-sm overflow-hidden">
         <a

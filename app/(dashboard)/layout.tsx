@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { MobileNav } from '@/components/MobileNav'
 import { DesktopNav } from '@/components/DesktopNav'
+import { InstallAppBanner } from '@/components/InstallAppBanner'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -25,6 +26,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <main className="flex-1 max-w-lg mx-auto w-full px-4 pt-4 pb-24 md:pb-8 md:max-w-4xl">
           {children}
         </main>
+        <InstallAppBanner />
         <MobileNav />
       </div>
     </div>

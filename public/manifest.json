@@ -1,18 +1,49 @@
 {
   "name": "신화유디텍 장비",
   "short_name": "신화유디텍",
-  "description": "재고관리",
-  "start_url": "/move-app",
+  "description": "회사 재고관리 앱 — 품목, 입출고, 바코드 스캔",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#f5f6f8",
   "theme_color": "#2563eb",
-  "icons": [],
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
   "shortcuts": [
     {
-      "name": "입·출고 전용",
+      "name": "입·출고",
       "short_name": "입출고",
-      "description": "메뉴 없이 입고·출고만",
-      "url": "/move-app"
+      "description": "현장 입고·출고",
+      "url": "/move-app",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "바코드 스캔",
+      "short_name": "스캔",
+      "description": "카메라로 바코드 스캔",
+      "url": "/scan",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

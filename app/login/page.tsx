@@ -147,6 +147,11 @@ export default async function LoginPage({
               들어가기
             </button>
           </form>
+
+          <p className="text-xs text-slate-400 text-center mt-4 leading-relaxed">
+            로그인 후 <strong className="text-slate-500">설정</strong>에서 휴대폰 홈 화면에 앱을 추가할 수
+            있습니다.
+          </p>
         </div>
       </div>
     </div>
