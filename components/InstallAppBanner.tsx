@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Download, X } from 'lucide-react'
-import { getInstallPlatform, isStandaloneMode } from '@/lib/pwa/platform'
-
-const DISMISS_KEY = 'jaego-install-banner-dismissed'
+import { DISMISS_KEY, shouldShowInstallBanner } from '@/lib/pwa/platform'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -13,26 +12,34 @@ type BeforeInstallPromptEvent = Event & {
 }
 
 export function InstallAppBanner() {
+  const pathname = usePathname()
   const [visible, setVisible] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
 
   useEffect(() => {
-    if (isStandaloneMode()) return
-    if (localStorage.getItem(DISMISS_KEY) === '1') return
-    const platform = getInstallPlatform()
-    if (platform === 'desktop') return
-    setVisible(true)
+    const update = () => setVisible(shouldShowInstallBanner())
+    update()
 
     const onBeforeInstall = (e: Event) => {
       e.preventDefault()
       setDeferredPrompt(e as BeforeInstallPromptEvent)
+      setVisible(shouldShowInstallBanner())
     }
+
     window.addEventListener('beforeinstallprompt', onBeforeInstall)
-    return () => window.removeEventListener('beforeinstallprompt', onBeforeInstall)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall)
+      window.removeEventListener('resize', update)
+    }
   }, [])
 
   const dismiss = () => {
-    localStorage.setItem(DISMISS_KEY, '1')
+    try {
+      localStorage.setItem(DISMISS_KEY, '1')
+    } catch {
+      /* ignore */
+    }
     setVisible(false)
   }
 
@@ -46,8 +53,14 @@ export function InstallAppBanner() {
 
   if (!visible) return null
 
+  const hasBottomNav =
+    pathname !== '/login' && !pathname.startsWith('/move-app')
+  const bottomClass = hasBottomNav
+    ? 'bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))]'
+    : 'bottom-[calc(1rem+env(safe-area-inset-bottom,0px))]'
+
   return (
-    <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-40 px-4 md:hidden pointer-events-none">
+    <div className={`fixed ${bottomClass} left-0 right-0 z-40 px-4 pointer-events-none`}>
       <div className="max-w-lg mx-auto pointer-events-auto rounded-2xl bg-slate-900 text-white shadow-lg border border-slate-700 p-3 flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium">홈 화면에 앱 추가</p>

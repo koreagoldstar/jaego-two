@@ -149,8 +149,8 @@ export default async function LoginPage({
           </form>
 
           <p className="text-xs text-slate-400 text-center mt-4 leading-relaxed">
-            로그인 후 <strong className="text-slate-500">설정</strong>에서 휴대폰 홈 화면에 앱을 추가할 수
-            있습니다.
+            로그인 후 하단 <strong className="text-slate-500">설정</strong> 또는 화면 아래{' '}
+            <strong className="text-slate-500">앱 추가</strong> 안내를 확인하세요.
           </p>
         </div>
       </div>
