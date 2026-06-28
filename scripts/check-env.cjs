@@ -37,7 +37,7 @@ const kioskEmail = env.NEXT_PUBLIC_KIOSK_EMAIL || "";
 if (kioskEmail) {
   console.log("✅ NEXT_PUBLIC_KIOSK_EMAIL (기본 이메일 대신 사용)");
 } else {
-  console.log("ℹ️  NEXT_PUBLIC_KIOSK_EMAIL 없음 → 기본 broadstock-kiosk@example.com (비밀번호 159311)");
+  console.log("ℹ️  NEXT_PUBLIC_KIOSK_EMAIL 없음 → 기본 broadstock-kiosk@example.com (비밀번호 5160)");
 }
 
 console.log("");

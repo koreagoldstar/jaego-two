@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "setup:check": "node scripts/check-env.cjs"
+    "setup:check": "node scripts/check-env.cjs",
+    "auth:reset-kiosk": "node scripts/reset-kiosk-auth.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.1",
