@@ -79,7 +79,7 @@ function inventoryRowsToLines(events: InventoryEventRow[]): ExportLine[] {
 export async function fetchStockTransactionRows(
   supabase: SupabaseClient,
   userId: string,
-  options: { itemId?: string } = {},
+  options: { itemId?: string; project?: string } = {},
 ): Promise<TxRow[]> {
   let query = supabase
     .from('stock_transactions')
@@ -90,6 +90,9 @@ export async function fetchStockTransactionRows(
 
   if (options.itemId) {
     query = query.eq('item_id', options.itemId)
+  }
+  if (options.project) {
+    query = query.eq('project', options.project)
   }
 
   const { data } = await query
@@ -120,10 +123,10 @@ export async function fetchInventoryEventRows(
 export async function buildExportLines(
   supabase: SupabaseClient,
   userId: string,
-  options: { itemId?: string; itemName?: string } = {},
+  options: { itemId?: string; itemName?: string; project?: string } = {},
 ): Promise<ExportLine[]> {
   const [stockRows, invRows] = await Promise.all([
-    fetchStockTransactionRows(supabase, userId, { itemId: options.itemId }),
+    fetchStockTransactionRows(supabase, userId, { itemId: options.itemId, project: options.project }),
     fetchInventoryEventRows(supabase, userId, { itemName: options.itemName }),
   ])
   return sortExportLines([...stockRowsToLines(stockRows), ...inventoryRowsToLines(invRows)])

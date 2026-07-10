@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
 
   const mode = request.nextUrl.searchParams.get('mode') ?? 'all'
   const itemId = request.nextUrl.searchParams.get('itemId')?.trim() ?? ''
+  const project = request.nextUrl.searchParams.get('project')?.trim() ?? ''
 
   if (mode === 'by-item') {
     const buf = await buildByItemWorkbook(supabase, user.id)
@@ -51,6 +52,12 @@ export async function GET(request: NextRequest) {
     })
     const buf = buildSingleSheetWorkbook(lines, item.name)
     return excelResponse(buf, `jaego-transactions-${sanitizeFilenamePart(item.name)}.xlsx`)
+  }
+
+  if (project) {
+    const lines = await buildExportLines(supabase, user.id, { project })
+    const buf = buildSingleSheetWorkbook(lines, project)
+    return excelResponse(buf, `jaego-transactions-${sanitizeFilenamePart(project)}.xlsx`)
   }
 
   const lines = await buildExportLines(supabase, user.id)

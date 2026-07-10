@@ -8,6 +8,7 @@ import {
 } from '@/lib/transactions/mapHistoryRows'
 import type { StockTransaction } from '@/lib/supabase/types'
 import { TransactionsHistoryClient } from '@/components/transactions/TransactionsHistoryClient'
+import { HISTORY_UI_LIMIT } from '@/lib/transactions/historyLimits'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,7 @@ export default async function TransactionsPage() {
       .select('id, direction, amount, note, project, lot_code, created_at, items(name, barcode_code)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(200),
+      .limit(HISTORY_UI_LIMIT),
     supabase.from('project_usage_plans').select('project_name').eq('user_id', user.id),
   ])
 
@@ -49,7 +50,7 @@ export default async function TransactionsPage() {
     .select('id, event_type, item_name, quantity, detail, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(200)
+    .limit(HISTORY_UI_LIMIT)
 
   const inventoryEvents = eventError ? [] : ((eventRows ?? []) as InventoryEventRow[])
 
@@ -64,11 +65,14 @@ export default async function TransactionsPage() {
         <div>
           <h1 className="text-xl font-bold text-slate-900">입출고 이력</h1>
           <p className="text-sm text-slate-500">
-            최근 200건 · 프로젝트별로 묶어 보기 · 항목을 누르면 상세가 펼쳐집니다
+            최근 {HISTORY_UI_LIMIT.toLocaleString()}건 · 프로젝트별로 묶어 보기 · 항목을 누르면 상세가 펼쳐집니다
           </p>
-          <p className="text-sm mt-1">
+          <p className="text-sm mt-1 flex flex-wrap gap-x-3 gap-y-1">
             <Link href="/transactions/by-item" className="text-blue-600 font-medium hover:underline">
-              제품별 입출고 이력 보기
+              제품별 입출고 이력
+            </Link>
+            <Link href="/transactions/by-project" className="text-blue-600 font-medium hover:underline">
+              프로젝트별 입출고 이력
             </Link>
           </p>
         </div>
@@ -86,7 +90,9 @@ export default async function TransactionsPage() {
           >
             제품별 시트
           </a>
-          <span className="text-xs text-slate-500 w-full sm:w-auto">화면 200건 · 엑셀 최대 5,000건/유형</span>
+          <span className="text-xs text-slate-500 w-full sm:w-auto">
+            화면 {HISTORY_UI_LIMIT.toLocaleString()}건 · 엑셀 최대 5,000건
+          </span>
         </div>
       </div>
 

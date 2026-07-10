@@ -6,6 +6,7 @@ import {
   mapStockTransactionsToHistoryRows,
   mergeHistoryRows,
 } from '@/lib/transactions/mapHistoryRows'
+import { HISTORY_UI_LIMIT } from '@/lib/transactions/historyLimits'
 import { createClient } from '@/lib/supabase/client'
 import { Download, Loader2, Package, Search } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -74,7 +75,7 @@ export function ItemTransactionsClient({ items, projectOptions, initialItemId }:
         .eq('user_id', user.id)
         .eq('item_id', itemId)
         .order('created_at', { ascending: false })
-        .limit(500),
+        .limit(HISTORY_UI_LIMIT),
       item
         ? supabase
             .from('inventory_events')
@@ -82,7 +83,7 @@ export function ItemTransactionsClient({ items, projectOptions, initialItemId }:
             .eq('user_id', user.id)
             .eq('item_name', item.name)
             .order('created_at', { ascending: false })
-            .limit(100)
+            .limit(200)
         : Promise.resolve({ data: [], error: null }),
     ])
 
@@ -206,7 +207,10 @@ export function ItemTransactionsClient({ items, projectOptions, initialItemId }:
       {!loading && historyRows.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-base font-semibold text-slate-900">
-            입출고 내역 <span className="text-sm font-normal text-slate-500">({historyRows.length}건)</span>
+            입출고 내역{' '}
+            <span className="text-sm font-normal text-slate-500">
+              ({historyRows.length}건 · 최대 {HISTORY_UI_LIMIT.toLocaleString()}건)
+            </span>
           </h2>
           <TransactionsHistoryClient
             key={`${selectedId}-${historyKey}`}
