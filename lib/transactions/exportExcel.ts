@@ -95,7 +95,8 @@ export async function fetchStockTransactionRows(
     query = query.eq('project', options.project)
   }
 
-  const { data } = await query
+  const { data, error } = await query
+  if (error) throw new Error(`입출고 이력 조회 실패: ${error.message}`)
   return (data ?? []) as unknown as TxRow[]
 }
 

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { buildCompletedProjectSet, splitProjectNames } from '@/lib/projects/projectStatus'
 import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
 import { buildShippedMap } from '@/lib/stockOverview'
+import { fetchAllPaged } from '@/lib/supabase/fetchAll'
 import type { Item } from '@/lib/supabase/types'
 import { ProjectOutboundHistory } from '@/components/projects/ProjectOutboundHistory'
 import { ProjectPlanMultiForm } from '@/components/projects/ProjectPlanMultiForm'
@@ -9,6 +10,7 @@ import { ProjectPlanSection } from '@/components/projects/ProjectPlanSection'
 import { normalizeProjectGroupKey } from '@/lib/history/groupByProject'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 type PlanRow = {
   project_name: string
@@ -17,13 +19,27 @@ type PlanRow = {
   planned_qty: number
 }
 
-type TxRow = {
+type TxDisplayRow = {
   created_at: string
   project: string | null
   item_id: string
   direction: 'in' | 'out'
   amount: number
-  items: { name: string }[] | null
+}
+
+type TxAggRow = {
+  project: string | null
+  item_id: string
+  direction: 'in' | 'out'
+  amount: number
+}
+
+function relatedItemName(
+  items: { name: string } | { name: string }[] | null | undefined,
+): string | null {
+  if (!items) return null
+  if (Array.isArray(items)) return items[0]?.name ?? null
+  return items.name ?? null
 }
 
 export default async function ProjectsPage() {
@@ -45,13 +61,21 @@ export default async function ProjectsPage() {
       .from('stock_transactions')
       .select('created_at, project, item_id, direction, amount, items(name)')
       .eq('user_id', user.id)
+      .eq('direction', 'out')
+      .not('project', 'is', null)
+      .neq('project', '')
       .order('created_at', { ascending: false })
       .limit(500),
-    supabase
-      .from('stock_transactions')
-      .select('id, created_at, project, item_id, direction, amount')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true }),
+    fetchAllPaged(async (from, to) =>
+      supabase
+        .from('stock_transactions')
+        .select('project, item_id, direction, amount')
+        .eq('user_id', user.id)
+        .not('project', 'is', null)
+        .neq('project', '')
+        .order('created_at', { ascending: true })
+        .range(from, to),
+    ),
     supabase
       .from('project_status')
       .select('project_name, completed_at')
@@ -61,8 +85,10 @@ export default async function ProjectsPage() {
 
   const items = (itemsRes.data ?? []) as Item[]
   const plans = (planRes.data ?? []) as unknown as PlanRow[]
-  const txRows = (txDisplayRes.data ?? []) as TxRow[]
-  const txAggRows = txAggRes.data ?? []
+  const txRows = (txDisplayRes.data ?? []) as (TxDisplayRow & {
+    items: { name: string } | { name: string }[] | null
+  })[]
+  const txAggRows = (txAggRes.data ?? []) as TxAggRow[]
   const statusRows = (statusRes.data ?? []) as ProjectStatusRow[]
   const itemById = new Map(items.map(item => [item.id, item] as const))
   const completedSet = buildCompletedProjectSet(statusRows)
@@ -84,7 +110,7 @@ export default async function ProjectsPage() {
             : planError?.message ??
               itemsRes.error?.message ??
               txDisplayRes.error?.message ??
-              txAggRes.error?.message ??
+              txAggRes.error ??
               '알 수 없는 오류'}
         </div>
       </div>
@@ -123,19 +149,17 @@ export default async function ProjectsPage() {
     completedSet,
   )
 
-  const completedOutRows = txRows
-    .filter(tx => tx.direction === 'out')
-    .map(tx => {
-      const project = normalizeProjectGroupKey(tx.project)
-      const rawProject = (tx.project ?? '').trim()
-      return {
-        created_at: tx.created_at,
-        project,
-        install_date: rawProject ? (projectInstallDate.get(rawProject) ?? null) : null,
-        item_name: tx.items?.[0]?.name ?? (itemById.get(tx.item_id)?.name ?? '품목'),
-        amount: tx.amount,
-      }
-    })
+  const completedOutRows = txRows.map(tx => {
+    const project = normalizeProjectGroupKey(tx.project)
+    const rawProject = (tx.project ?? '').trim()
+    return {
+      created_at: tx.created_at,
+      project,
+      install_date: rawProject ? (projectInstallDate.get(rawProject) ?? null) : null,
+      item_name: relatedItemName(tx.items) ?? itemById.get(tx.item_id)?.name ?? '품목',
+      amount: tx.amount,
+    }
+  })
 
   const itemOptions = items.map(item => ({ id: item.id, name: item.name, quantity: item.quantity ?? 0 }))
 

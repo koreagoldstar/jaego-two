@@ -2,7 +2,6 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseEnvStatus } from '@/lib/supabase/supabasePublicEnv'
 import { formatAuthError } from '@/lib/auth-errors'
-import { getKioskEmail } from '@/lib/kiosk-auth'
 
 function errRedirect(request: NextRequest, message: string) {
   const u = new URL('/login', request.url)
@@ -13,9 +12,7 @@ function errRedirect(request: NextRequest, message: string) {
 export async function POST(request: NextRequest) {
   const formData = await request.formData()
   const password = String(formData.get('password') ?? '').trim()
-
-  const rawEmail = String(formData.get('email') ?? '').trim()
-  const email = (rawEmail || getKioskEmail()).toLowerCase()
+  const email = String(formData.get('email') ?? '').trim().toLowerCase()
 
   if (!password) {
     return errRedirect(request, '비밀번호를 입력해 주세요.')

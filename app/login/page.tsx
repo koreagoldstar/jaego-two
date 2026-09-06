@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import { getKioskEmail } from '@/lib/kiosk-auth'
 import { getSupabaseEnvStatus } from '@/lib/supabase/supabasePublicEnv'
 import { createClient } from '@/lib/supabase/server'
 
@@ -30,7 +29,6 @@ export default async function LoginPage({
   }
 
   const error = readError(searchParams)
-  const kioskEmail = getKioskEmail()
   const env = getSupabaseEnvStatus()
 
   return (
@@ -107,16 +105,15 @@ export default async function LoginPage({
                 id="email"
                 name="email"
                 type="email"
-                autoComplete="username"
-                defaultValue={kioskEmail}
+                autoComplete="off"
+                defaultValue=""
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-                placeholder="name@example.com"
+                placeholder="이메일을 입력하세요"
                 required
               />
               <p className="text-xs text-slate-400 mt-2">
-                <strong className="text-slate-500">Authentication → Users</strong> 에 있는 계정과 같아야 합니다. 칸을
-                본인 이메일로 고치면 됩니다. 기본값은{' '}
-                <code className="text-[11px] bg-slate-100 px-1">NEXT_PUBLIC_KIOSK_EMAIL</code> 또는 예시 주소입니다.
+                Supabase <strong className="text-slate-500">Authentication → Users</strong> 에 등록된 이메일을
+                입력하세요.
               </p>
             </div>
             <div>

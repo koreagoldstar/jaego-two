@@ -2,9 +2,11 @@ import { createClient } from '@/lib/supabase/server'
 import type { Item } from '@/lib/supabase/types'
 import { buildCompletedProjectSet } from '@/lib/projects/projectStatus'
 import type { ProjectStatusRow } from '@/lib/projects/projectStatus'
+import { fetchAllPaged } from '@/lib/supabase/fetchAll'
 import { buildStockOverview, type PlanSumRow, type ShippedTxRow } from '@/lib/stockOverview'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 export default async function StockOverviewPage({
   searchParams,
@@ -23,19 +25,36 @@ export default async function StockOverviewPage({
       .from('project_usage_plans')
       .select('project_name, install_date, item_id, planned_qty')
       .eq('user_id', user.id),
-    supabase
-      .from('stock_transactions')
-      .select('id, project, item_id, direction, amount, created_at')
-      .eq('user_id', user.id),
+    fetchAllPaged(async (from, to) =>
+      supabase
+        .from('stock_transactions')
+        .select('project, item_id, direction, amount')
+        .eq('user_id', user.id)
+        .not('project', 'is', null)
+        .neq('project', '')
+        .order('created_at', { ascending: true })
+        .range(from, to),
+    ),
     supabase.from('project_status').select('project_name, completed_at').eq('user_id', user.id),
   ])
 
+  if (itemsRes.error || plansRes.error || txRes.error) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">재고 요약표</h1>
+          <p className="text-sm text-red-600">데이터를 불러오는 중 오류가 발생했습니다.</p>
+        </div>
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {itemsRes.error?.message ?? plansRes.error?.message ?? txRes.error ?? '알 수 없는 오류'}
+        </div>
+      </div>
+    )
+  }
+
   const items = (itemsRes.data ?? []) as Item[]
   const plans = (plansRes.data ?? []) as PlanSumRow[]
-  const allTxRows = txRes.data ?? []
-  const transactions = allTxRows.filter(
-    tx => (tx.project ?? '').trim() !== '',
-  ) as ShippedTxRow[]
+  const transactions = txRes.data as ShippedTxRow[]
   const completedProjects = buildCompletedProjectSet((statusRes.data ?? []) as ProjectStatusRow[])
   const selectedProject = (searchParams?.project ?? '').trim()
 
