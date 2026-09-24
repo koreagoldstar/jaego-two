@@ -63,7 +63,7 @@ export default async function HomePage() {
               </Link>
             </div>
             <p className="mt-4 text-sm text-slate-500">
-              카드 등록 없이 가입 · 월 {formatWon(PUBLIC_PLANS[0].monthlyPrice)}원부터 (VAT 별도)
+              카드 등록 없이 가입 · 월 {formatWon(PUBLIC_PLANS[0].monthlyPrice)}원부터 (VAT 포함)
             </p>
           </div>
           <div className="relative">
@@ -148,7 +148,7 @@ export default async function HomePage() {
                   <span className="text-3xl font-bold text-slate-900">{formatWon(p.monthlyPrice)}</span>
                   <span className="text-slate-500">원/월</span>
                 </p>
-                <p className="text-xs text-slate-400">부가세 별도</p>
+                <p className="text-xs text-slate-400">부가세 포함</p>
               </div>
             ))}
           </div>

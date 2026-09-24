@@ -2,11 +2,11 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Check } from 'lucide-react'
 import { CtaBand } from '@/components/site/CtaBand'
-import { PUBLIC_PLANS, TRIAL_DAYS, formatWon, withVat } from '@/lib/saas/plans'
+import { PUBLIC_PLANS, TRIAL_DAYS, formatWon } from '@/lib/saas/plans'
 
 export const metadata: Metadata = {
   title: '요금 안내',
-  description: '품목 2,000개까지 월 2만원, 10,000개까지 월 3만원, 그 이상 월 5만원 (VAT 별도). 모든 기능 포함.',
+  description: '품목 2,000개까지 월 25,000원, 5,000개까지 월 45,000원, 그 이상 월 70,000원 (부가세 포함). 모든 기능 포함.',
 }
 
 const INCLUDED = [
@@ -81,7 +81,7 @@ export default function PricingPage() {
                 <span className="text-slate-500">원 / 월</span>
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                부가세 별도 (VAT 포함 {formatWon(withVat(p.monthlyPrice))}원)
+                부가세 포함
               </p>
               <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-sm">
                 <span className="text-slate-500">등록 가능 품목</span>

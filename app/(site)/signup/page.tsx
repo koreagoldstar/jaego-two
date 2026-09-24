@@ -81,7 +81,7 @@ export default async function SignupPage({
                 </label>
               ))}
             </div>
-            <p className="mt-1.5 text-xs text-slate-400">가격은 부가세 별도이며, 나중에 언제든 바꿀 수 있습니다.</p>
+            <p className="mt-1.5 text-xs text-slate-400">가격은 부가세 포함이며, 나중에 언제든 바꿀 수 있습니다.</p>
           </fieldset>
 
           <div>

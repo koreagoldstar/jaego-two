@@ -43,7 +43,7 @@ export default async function SettingsPage() {
                 {workspace.plan.name} 요금제 · {STATUS_LABEL[workspace.status]}
                 {trialLeft !== null && ` (${trialLeft}일 남음)`}
                 {workspace.plan.monthlyPrice > 0 &&
-                  ` · 월 ${formatWon(workspace.plan.monthlyPrice)}원 (VAT 별도)`}
+                  ` · 월 ${formatWon(workspace.plan.monthlyPrice)}원 (VAT 포함)`}
               </p>
             </div>
           </div>
