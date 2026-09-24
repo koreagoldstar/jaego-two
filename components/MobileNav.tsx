@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { Home, Package, ArrowLeftRight, ScanLine, FolderKanban, Menu } from 'lucide-react'
 
 const links = [
-  { href: '/', label: '홈', icon: Home },
+  { href: '/dashboard', label: '홈', icon: Home },
   { href: '/items', label: '품목', icon: Package },
   { href: '/move', label: '입출고', icon: ArrowLeftRight },
   { href: '/scan', label: '스캔', icon: ScanLine },
@@ -23,7 +23,7 @@ export function MobileNav() {
     >
       <ul className="flex max-w-lg mx-auto justify-around items-stretch h-14">
         {links.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || (href !== '/' && pathname.startsWith(href))
+          const active = pathname === href || pathname.startsWith(href + '/')
           return (
             <li key={href} className="flex-1">
               <Link

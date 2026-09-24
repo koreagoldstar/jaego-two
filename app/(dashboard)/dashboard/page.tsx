@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { getWorkspace, trialDaysLeft, type Workspace } from '@/lib/saas/workspace'
+import { formatWon } from '@/lib/saas/plans'
 import { Package, ArrowLeftRight, ScanLine, Barcode, History, Boxes, FolderKanban, Table } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -12,7 +14,9 @@ export default async function HomePage() {
 
   let totalQty = 0
   let itemCount = 0
+  let workspace: Workspace | null = null
   if (user) {
+    workspace = await getWorkspace(supabase, user.id)
     const { data: items } = await supabase.from('items').select('quantity').eq('user_id', user.id)
     itemCount = items?.length ?? 0
     totalQty = items?.reduce((s, r) => s + (r.quantity ?? 0), 0) ?? 0
@@ -29,16 +33,32 @@ export default async function HomePage() {
     { href: '/transactions', label: '입출고 이력', desc: '전체·제품별·프로젝트별', icon: History, color: 'bg-white' },
   ]
 
+  const trialLeft = workspace?.status === 'trial' ? trialDaysLeft(workspace.trialEndsAt) : null
+  const itemLimit = workspace?.plan.itemLimit ?? null
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-slate-900">대시보드</h1>
+        {workspace && <p className="text-sm text-slate-500">{workspace.companyName}</p>}
       </div>
+
+      {trialLeft !== null && (
+        <Link
+          href="/settings"
+          className="block rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900"
+        >
+          무료 체험 <strong>{trialLeft}일</strong> 남았습니다 · {workspace?.plan.name} 요금제
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
           <p className="text-xs text-slate-500">총 품목</p>
           <p className="text-2xl font-semibold text-slate-900">{itemCount}</p>
+          {itemLimit !== null && (
+            <p className="text-[11px] text-slate-400 mt-0.5">한도 {formatWon(itemLimit)}개</p>
+          )}
         </div>
         <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
           <p className="text-xs text-slate-500">총 수량</p>

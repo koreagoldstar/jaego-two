@@ -4,12 +4,17 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { PwaRegister } from '@/components/PwaRegister'
 import { InstallAppBanner } from '@/components/InstallAppBanner'
+import { APP_NAME, SAAS_MODE } from '@/lib/saas/mode'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: '신화유디텍 장비',
-  description: '재고관리',
+  title: SAAS_MODE
+    ? { default: '오늘의 재고 — 바코드 한 번으로 끝나는 재고관리', template: '%s | 오늘의 재고' }
+    : APP_NAME,
+  description: SAAS_MODE
+    ? '품목 등록부터 입출고, 바코드·QR 라벨, 프로젝트별 자재 관리까지. 휴대폰 하나로 쓰는 현장형 재고관리 서비스.'
+    : '재고관리',
   manifest: '/manifest.json',
   icons: {
     icon: [{ url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }],
@@ -18,7 +23,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: '신화유디텍 장비',
+    title: APP_NAME,
   },
   formatDetection: {
     telephone: false,

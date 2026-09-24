@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { MobileNav } from '@/components/MobileNav'
 import { DesktopNav } from '@/components/DesktopNav'
+import { getWorkspace } from '@/lib/saas/workspace'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -11,6 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) {
     redirect('/login')
   }
+  const workspace = await getWorkspace(supabase, user.id)
 
   return (
     <div
@@ -20,7 +22,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           "linear-gradient(rgba(238,242,247,0.32), rgba(238,242,247,0.32)), url('/inventory-bg.png')",
       }}
     >
-      <DesktopNav />
+      <DesktopNav companyName={workspace?.companyName} />
       <div className="flex-1 flex flex-col min-w-0">
         <main className="flex-1 max-w-lg mx-auto w-full px-4 pt-4 pb-24 md:pb-8 md:max-w-4xl">
           {children}

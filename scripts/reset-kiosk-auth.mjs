@@ -32,7 +32,7 @@ const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
 const email = (
   process.env.NEXT_PUBLIC_KIOSK_EMAIL ||
   process.env.KIOSK_EMAIL ||
-  'broadstock-kiosk@example.com'
+  '47156@naver.com'
 )
   .trim()
   .toLowerCase()

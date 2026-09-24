@@ -7,6 +7,9 @@ import { Download, X } from 'lucide-react'
 import { DISMISS_KEY, shouldShowInstallBanner } from '@/lib/pwa/platform'
 import { usePwaInstall } from '@/lib/pwa/usePwaInstall'
 
+/** 소개 사이트 페이지에서는 설치 배너를 띄우지 않음 */
+const SITE_PATHS = ['/', '/features', '/pricing', '/custom', '/contact', '/signup']
+
 export function InstallAppBanner() {
   const pathname = usePathname()
   const { canNativeInstall, installing, install } = usePwaInstall()
@@ -36,7 +39,7 @@ export function InstallAppBanner() {
     }
   }
 
-  if (!visible) return null
+  if (!visible || SITE_PATHS.includes(pathname)) return null
 
   const hasBottomNav = pathname !== '/login' && !pathname.startsWith('/move-app')
   const bottomClass = hasBottomNav

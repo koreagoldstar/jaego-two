@@ -1,11 +1,13 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getSupabaseEnvStatus } from '@/lib/supabase/supabasePublicEnv'
 import { createClient } from '@/lib/supabase/server'
+import { APP_NAME, SAAS_MODE } from '@/lib/saas/mode'
 
 export const dynamic = 'force-dynamic'
 
-function readError(searchParams: Record<string, string | string[] | undefined>) {
-  const raw = searchParams.error
+function readParam(searchParams: Record<string, string | string[] | undefined>, key: string) {
+  const raw = searchParams[key]
   const s = typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : undefined
   if (!s) return undefined
   try {
@@ -25,24 +27,25 @@ export default async function LoginPage({
     data: { user },
   } = await supabase.auth.getUser()
   if (user) {
-    redirect('/')
+    redirect('/dashboard')
   }
 
-  const error = readError(searchParams)
+  const error = readParam(searchParams, 'error')
+  const notice = readParam(searchParams, 'notice')
   const env = getSupabaseEnvStatus()
 
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
+        <Link href="/" className="block text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4 shadow-sm">
             <span className="text-2xl" aria-hidden>
               📦
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">신화유디텍 장비</h1>
-          <p className="text-slate-500 text-sm mt-1">재고관리</p>
-        </div>
+          <h1 className="text-2xl font-bold text-slate-900">{APP_NAME}</h1>
+          <p className="text-slate-500 text-sm mt-1">{SAAS_MODE ? '회사 계정으로 로그인' : '재고관리'}</p>
+        </Link>
 
         <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
           {!env.ok && (
@@ -111,10 +114,6 @@ export default async function LoginPage({
                 placeholder="이메일을 입력하세요"
                 required
               />
-              <p className="text-xs text-slate-400 mt-2">
-                Supabase <strong className="text-slate-500">Authentication → Users</strong> 에 등록된 이메일을
-                입력하세요.
-              </p>
             </div>
             <div>
               <label htmlFor="password" className="block text-sm text-slate-600 mb-1">
@@ -131,6 +130,12 @@ export default async function LoginPage({
               />
             </div>
 
+            {notice && (
+              <p className="text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 border border-emerald-100">
+                {notice}
+              </p>
+            )}
+
             {error && (
               <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 whitespace-pre-wrap border border-red-100">
                 {error}
@@ -145,10 +150,14 @@ export default async function LoginPage({
             </button>
           </form>
 
-          <p className="text-xs text-slate-400 text-center mt-4 leading-relaxed">
-            로그인 후 하단 <strong className="text-slate-500">설정</strong> 또는 화면 아래{' '}
-            <strong className="text-slate-500">앱 추가</strong> 안내를 확인하세요.
-          </p>
+          {SAAS_MODE && (
+            <p className="text-sm text-slate-500 text-center mt-5">
+              아직 계정이 없으신가요?{' '}
+              <Link href="/signup" className="text-blue-600 font-medium hover:underline">
+                무료로 시작하기
+              </Link>
+            </p>
+          )}
         </div>
       </div>
     </div>

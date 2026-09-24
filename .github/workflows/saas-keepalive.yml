@@ -1,0 +1,25 @@
+# 오늘의 재고(판매용) Supabase 무료 프로젝트가 7일 무접속으로 일시정지되지 않도록 하루 한 번 조회합니다.
+# GitHub → Settings → Secrets and variables → Actions → New repository secret
+#   SAAS_SUPABASE_ANON_KEY : 판매용 Supabase 의 anon public 키
+name: saas-supabase-keepalive
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # 매일 09:00 KST
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        env:
+          SUPABASE_URL: https://cmelpqogzbftrvatkutf.supabase.co
+          ANON_KEY: ${{ secrets.SAAS_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$ANON_KEY" ]; then echo "SAAS_SUPABASE_ANON_KEY secret 이 없습니다"; exit 1; fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            "$SUPABASE_URL/rest/v1/plans?select=id&limit=1" \
+            -H "apikey: $ANON_KEY" -H "Authorization: Bearer $ANON_KEY")
+          echo "HTTP $code"
+          [ "$code" = "200" ]

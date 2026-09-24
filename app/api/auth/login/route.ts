@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const okUrl = new URL('/', request.url)
+  const okUrl = new URL('/dashboard', request.url)
   const response = NextResponse.redirect(okUrl)
 
   const supabase = createServerClient(env.url, env.key, {
@@ -59,11 +59,8 @@ export async function POST(request: NextRequest) {
   })
 
   if (error) {
-    const raw = [error.code, error.message].filter(Boolean).join(' · ')
-    const msg =
-      formatAuthError(error.message) +
-      ` — ${raw}. Supabase Authentication → Users 에서 이메일「${email}」계정 비밀번호를 확인하거나 재설정하세요.`
-    return errRedirect(request, msg)
+    console.error('[auth/login]', email, error.code, error.message)
+    return errRedirect(request, formatAuthError(error.message))
   }
 
   if (!data.session) {
