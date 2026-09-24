@@ -4,6 +4,7 @@ import { getSupabaseEnvStatus } from '@/lib/supabase/supabasePublicEnv'
 import { formatAuthError } from '@/lib/auth-errors'
 import { isPublicPlanId } from '@/lib/saas/plans'
 import { SAAS_MODE } from '@/lib/saas/mode'
+import { notifyAdmin } from '@/lib/saas/notify'
 
 function back(request: NextRequest, params: Record<string, string>) {
   const u = new URL('/signup', request.url)
@@ -68,6 +69,19 @@ export async function POST(request: NextRequest) {
   if (data.user && (data.user.identities?.length ?? 0) === 0) {
     return fail('이미 가입된 이메일입니다. 로그인해 주세요.')
   }
+
+  await notifyAdmin(
+    `새 가입 — ${companyName}`,
+    [
+      ['회사명', companyName],
+      ['담당자', contactName],
+      ['연락처', phone],
+      ['이메일', email],
+      ['선택 요금제', plan],
+      ['이메일 인증', data.session ? '불필요(바로 사용)' : '인증 메일 발송됨'],
+    ],
+    email
+  )
 
   // Supabase 에서 이메일 인증을 켜 둔 경우: 세션 없음 → 메일 확인 안내
   if (!data.session) {
