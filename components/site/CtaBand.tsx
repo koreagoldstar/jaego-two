@@ -10,16 +10,16 @@ export function CtaBand({
 }) {
   return (
     <section className="px-4 py-16">
-      <div className="mx-auto max-w-5xl rounded-3xl bg-blue-600 px-6 py-12 text-center text-white md:px-12">
+      <div className="mx-auto max-w-5xl rounded-3xl bg-brand-600 px-6 py-12 text-center text-white md:px-12">
         <h2 className="text-2xl font-bold md:text-3xl">{title}</h2>
-        <p className="mx-auto mt-3 max-w-xl text-blue-100">{desc}</p>
+        <p className="mx-auto mt-3 max-w-xl text-brand-100">{desc}</p>
         <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-          <Link href="/signup" className="rounded-xl bg-white px-6 py-3.5 font-semibold text-blue-700 hover:bg-blue-50">
+          <Link href="/signup" className="rounded-xl bg-white px-6 py-3.5 font-semibold text-brand-700 hover:bg-brand-50">
             무료로 시작하기
           </Link>
           <Link
             href="/contact"
-            className="rounded-xl border border-blue-300/60 px-6 py-3.5 font-semibold text-white hover:bg-blue-500"
+            className="rounded-xl border border-brand-300/60 px-6 py-3.5 font-semibold text-white hover:bg-brand-500"
           >
             도입 문의하기
           </Link>

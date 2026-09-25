@@ -27,18 +27,18 @@ const PROCESS = [
 export default function CustomPage() {
   return (
     <>
-      <section className="bg-gradient-to-b from-slate-100 to-white px-4 pb-8 pt-16 text-center md:pt-20">
-        <p className="text-sm font-semibold text-blue-600">맞춤 제작</p>
-        <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 md:text-4xl">
+      <section className="bg-gradient-to-b from-stone-100 to-white px-4 pb-8 pt-16 text-center md:pt-20">
+        <p className="text-sm font-semibold text-brand-600">맞춤 제작</p>
+        <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-stone-900 md:text-4xl">
           우리 회사 방식대로 만드는 재고관리
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-slate-600">
+        <p className="mx-auto mt-4 max-w-2xl text-stone-600">
           기본 기능만으로 부족하다면, 원하시는 기능을 추가로 만들어 드립니다. 요금제는 그대로, 추가 기능 비용은
           요구사항에 따라 별도로 책정합니다.
         </p>
         <Link
           href="/contact?kind=custom"
-          className="mt-8 inline-block rounded-xl bg-blue-600 px-6 py-3.5 font-semibold text-white hover:bg-blue-700"
+          className="mt-8 inline-block rounded-xl bg-brand-600 px-6 py-3.5 font-semibold text-white hover:bg-brand-700"
         >
           맞춤 제작 상담 신청
         </Link>
@@ -46,29 +46,29 @@ export default function CustomPage() {
 
       <section className="px-4 py-14">
         <div className="mx-auto max-w-6xl">
-          <h2 className="text-center text-2xl font-bold text-slate-900">이런 기능을 만들 수 있습니다</h2>
+          <h2 className="text-center text-2xl font-bold text-stone-900">이런 기능을 만들 수 있습니다</h2>
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {EXAMPLES.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="rounded-2xl border border-slate-200 p-6">
-                <Icon className="h-6 w-6 text-blue-600" />
-                <h3 className="mt-3 font-semibold text-slate-900">{title}</h3>
-                <p className="mt-1.5 text-sm text-slate-600">{desc}</p>
+              <div key={title} className="rounded-2xl border border-stone-200 p-6">
+                <Icon className="h-6 w-6 text-brand-600" />
+                <h3 className="mt-3 font-semibold text-stone-900">{title}</h3>
+                <p className="mt-1.5 text-sm text-stone-600">{desc}</p>
               </div>
             ))}
           </div>
-          <p className="mt-6 text-center text-sm text-slate-500">예시 외에도 필요한 기능이면 무엇이든 말씀해 주세요.</p>
+          <p className="mt-6 text-center text-sm text-stone-500">예시 외에도 필요한 기능이면 무엇이든 말씀해 주세요.</p>
         </div>
       </section>
 
-      <section className="bg-slate-50 px-4 py-16">
+      <section className="bg-stone-50 px-4 py-16">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-center text-2xl font-bold text-slate-900">진행 순서</h2>
+          <h2 className="text-center text-2xl font-bold text-stone-900">진행 순서</h2>
           <div className="mt-10 grid gap-5 md:grid-cols-4">
             {PROCESS.map(p => (
               <div key={p.n} className="rounded-2xl bg-white p-6 shadow-sm">
-                <p className="text-sm font-bold text-blue-600">{p.n}</p>
-                <h3 className="mt-2 text-lg font-semibold text-slate-900">{p.title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{p.desc}</p>
+                <p className="text-sm font-bold text-brand-600">{p.n}</p>
+                <h3 className="mt-2 text-lg font-semibold text-stone-900">{p.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-stone-600">{p.desc}</p>
               </div>
             ))}
           </div>

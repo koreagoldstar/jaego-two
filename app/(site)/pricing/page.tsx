@@ -50,12 +50,12 @@ const FAQ = [
 export default function PricingPage() {
   return (
     <>
-      <section className="bg-gradient-to-b from-blue-50 to-white px-4 pb-4 pt-16 text-center md:pt-20">
-        <p className="text-sm font-semibold text-blue-600">요금 안내</p>
-        <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 md:text-4xl">
+      <section className="bg-gradient-to-b from-brand-50 to-white px-4 pb-4 pt-16 text-center md:pt-20">
+        <p className="text-sm font-semibold text-brand-600">요금 안내</p>
+        <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-stone-900 md:text-4xl">
           품목 수만 보고 고르세요
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-slate-600">
+        <p className="mx-auto mt-4 max-w-2xl text-stone-600">
           모든 요금제에 모든 기능이 들어 있습니다. {TRIAL_DAYS}일 무료 체험으로 먼저 써 보세요.
         </p>
       </section>
@@ -66,26 +66,26 @@ export default function PricingPage() {
             <div
               key={p.id}
               className={`relative flex flex-col rounded-3xl border bg-white p-7 ${
-                p.highlight ? 'border-blue-600 shadow-lg shadow-blue-600/10 ring-1 ring-blue-600' : 'border-slate-200'
+                p.highlight ? 'border-brand-600 shadow-lg shadow-brand-600/10 ring-1 ring-brand-600' : 'border-stone-200'
               }`}
             >
               {p.highlight && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
+                <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white">
                   가장 많이 선택
                 </span>
               )}
-              <h2 className="text-xl font-bold text-slate-900">{p.name}</h2>
-              <p className="mt-1 text-sm text-slate-500">{p.summary}</p>
+              <h2 className="text-xl font-bold text-stone-900">{p.name}</h2>
+              <p className="mt-1 text-sm text-stone-500">{p.summary}</p>
               <p className="mt-6">
-                <span className="text-4xl font-extrabold text-slate-900">{formatWon(p.monthlyPrice)}</span>
-                <span className="text-slate-500">원 / 월</span>
+                <span className="text-4xl font-extrabold text-stone-900">{formatWon(p.monthlyPrice)}</span>
+                <span className="text-stone-500">원 / 월</span>
               </p>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-stone-400">
                 부가세 포함
               </p>
-              <div className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                <span className="text-slate-500">등록 가능 품목</span>
-                <p className="font-semibold text-slate-900">
+              <div className="mt-6 rounded-xl bg-stone-50 px-4 py-3 text-sm">
+                <span className="text-stone-500">등록 가능 품목</span>
+                <p className="font-semibold text-stone-900">
                   {p.itemLimit === null ? '무제한' : `${formatWon(p.itemLimit)}개까지`}
                 </p>
               </div>
@@ -93,8 +93,8 @@ export default function PricingPage() {
                 href={`/signup?plan=${p.id}`}
                 className={`mt-6 block rounded-xl py-3.5 text-center font-semibold ${
                   p.highlight
-                    ? 'bg-blue-600 text-white hover:bg-blue-700'
-                    : 'border border-slate-300 text-slate-800 hover:bg-slate-50'
+                    ? 'bg-brand-600 text-white hover:bg-brand-700'
+                    : 'border border-stone-300 text-stone-800 hover:bg-stone-50'
                 }`}
               >
                 {TRIAL_DAYS}일 무료 체험
@@ -103,42 +103,42 @@ export default function PricingPage() {
           ))}
         </div>
 
-        <div className="mx-auto mt-10 max-w-5xl rounded-3xl border border-slate-200 p-7">
-          <h2 className="font-bold text-slate-900">모든 요금제에 포함</h2>
+        <div className="mx-auto mt-10 max-w-5xl rounded-3xl border border-stone-200 p-7">
+          <h2 className="font-bold text-stone-900">모든 요금제에 포함</h2>
           <ul className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
             {INCLUDED.map(t => (
-              <li key={t} className="flex items-center gap-2 text-sm text-slate-700">
-                <Check className="h-4 w-4 shrink-0 text-blue-600" /> {t}
+              <li key={t} className="flex items-center gap-2 text-sm text-stone-700">
+                <Check className="h-4 w-4 shrink-0 text-brand-600" /> {t}
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="mx-auto mt-5 flex max-w-5xl flex-col items-start justify-between gap-4 rounded-3xl bg-slate-900 p-7 text-white md:flex-row md:items-center">
+        <div className="mx-auto mt-5 flex max-w-5xl flex-col items-start justify-between gap-4 rounded-3xl bg-stone-900 p-7 text-white md:flex-row md:items-center">
           <div>
             <h2 className="text-lg font-bold">맞춤 기능 제작 · 별도 견적</h2>
-            <p className="mt-1 text-sm text-slate-300">
+            <p className="mt-1 text-sm text-stone-300">
               위 요금은 현재 제공 기능 기준입니다. 회사에 필요한 기능은 원하시는 대로 만들어 드리고, 비용은 따로
               책정합니다.
             </p>
           </div>
-          <Link href="/custom" className="shrink-0 rounded-xl bg-white px-5 py-3 font-semibold text-slate-900 hover:bg-slate-100">
+          <Link href="/custom" className="shrink-0 rounded-xl bg-white px-5 py-3 font-semibold text-stone-900 hover:bg-stone-100">
             맞춤 제작 알아보기
           </Link>
         </div>
       </section>
 
-      <section className="bg-slate-50 px-4 py-16">
+      <section className="bg-stone-50 px-4 py-16">
         <div className="mx-auto max-w-3xl">
-          <h2 className="text-center text-2xl font-bold text-slate-900">자주 묻는 질문</h2>
+          <h2 className="text-center text-2xl font-bold text-stone-900">자주 묻는 질문</h2>
           <div className="mt-8 space-y-3">
             {FAQ.map(f => (
               <details key={f.q} className="group rounded-2xl bg-white p-5 shadow-sm">
-                <summary className="flex cursor-pointer list-none items-center justify-between font-semibold text-slate-900">
+                <summary className="flex cursor-pointer list-none items-center justify-between font-semibold text-stone-900">
                   {f.q}
-                  <span className="ml-4 text-slate-400 transition-transform group-open:rotate-45">+</span>
+                  <span className="ml-4 text-stone-400 transition-transform group-open:rotate-45">+</span>
                 </summary>
-                <p className="mt-3 text-sm leading-relaxed text-slate-600">{f.a}</p>
+                <p className="mt-3 text-sm leading-relaxed text-stone-600">{f.a}</p>
               </details>
             ))}
           </div>

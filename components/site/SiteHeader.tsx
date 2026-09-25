@@ -4,18 +4,18 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
-import { SITE, SITE_NAV } from '@/lib/saas/site'
+import { SITE_NAV } from '@/lib/saas/site'
+import { Logo } from '@/components/site/Logo'
 
 export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-stone-200/80 bg-white/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2 font-bold text-slate-900" onClick={() => setOpen(false)}>
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-base">📦</span>
-          {SITE.name}
+        <Link href="/" aria-label="오늘의 재고 홈" onClick={() => setOpen(false)}>
+          <Logo className="text-lg" />
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex">
@@ -24,7 +24,7 @@ export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
               key={href}
               href={href}
               className={`rounded-lg px-3 py-2 text-sm ${
-                pathname === href ? 'font-semibold text-blue-600' : 'text-slate-600 hover:text-slate-900'
+                pathname === href ? 'font-semibold text-brand-600' : 'text-stone-600 hover:text-stone-900'
               }`}
             >
               {label}
@@ -34,15 +34,15 @@ export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
 
         <div className="hidden items-center gap-2 md:flex">
           {loggedIn ? (
-            <Link href="/dashboard" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+            <Link href="/dashboard" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
               내 재고로 이동
             </Link>
           ) : (
             <>
-              <Link href="/login" className="rounded-lg px-3 py-2 text-sm text-slate-600 hover:text-slate-900">
+              <Link href="/login" className="rounded-lg px-3 py-2 text-sm text-stone-600 hover:text-stone-900">
                 로그인
               </Link>
-              <Link href="/signup" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
+              <Link href="/signup" className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
                 무료로 시작하기
               </Link>
             </>
@@ -51,7 +51,7 @@ export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
 
         <button
           type="button"
-          className="-mr-2 rounded-lg p-2 text-slate-700 md:hidden"
+          className="-mr-2 rounded-lg p-2 text-stone-700 md:hidden"
           aria-label={open ? '메뉴 닫기' : '메뉴 열기'}
           aria-expanded={open}
           onClick={() => setOpen(v => !v)}
@@ -61,29 +61,29 @@ export function SiteHeader({ loggedIn }: { loggedIn: boolean }) {
       </div>
 
       {open && (
-        <div className="border-t border-slate-200 bg-white px-4 pb-4 md:hidden">
+        <div className="border-t border-stone-200 bg-white px-4 pb-4 md:hidden">
           <nav className="flex flex-col py-2">
             {SITE_NAV.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
                 onClick={() => setOpen(false)}
-                className={`py-3 text-base ${pathname === href ? 'font-semibold text-blue-600' : 'text-slate-700'}`}
+                className={`py-3 text-base ${pathname === href ? 'font-semibold text-brand-600' : 'text-stone-700'}`}
               >
                 {label}
               </Link>
             ))}
           </nav>
           {loggedIn ? (
-            <Link href="/dashboard" className="block rounded-xl bg-blue-600 py-3 text-center font-medium text-white">
+            <Link href="/dashboard" className="block rounded-xl bg-brand-600 py-3 text-center font-medium text-white">
               내 재고로 이동
             </Link>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              <Link href="/login" className="rounded-xl border border-slate-200 py-3 text-center font-medium text-slate-700">
+              <Link href="/login" className="rounded-xl border border-stone-200 py-3 text-center font-medium text-stone-700">
                 로그인
               </Link>
-              <Link href="/signup" className="rounded-xl bg-blue-600 py-3 text-center font-medium text-white">
+              <Link href="/signup" className="rounded-xl bg-brand-600 py-3 text-center font-medium text-white">
                 무료로 시작하기
               </Link>
             </div>
