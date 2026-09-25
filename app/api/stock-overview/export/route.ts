@@ -7,6 +7,7 @@ import { buildStockOverview, type PlanSumRow, type ShippedTxRow } from '@/lib/st
 import type { Item } from '@/lib/supabase/types'
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getDataUser(supabase)
     if (!user) return new NextResponse('Unauthorized', { status: 401 })
 
     const type = request.nextUrl.searchParams.get('type') ?? 'items'

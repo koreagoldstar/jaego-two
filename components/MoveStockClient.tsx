@@ -21,6 +21,7 @@ import type { Item, ItemStockLot } from '@/lib/supabase/types'
 import { StockUnitPicker } from '@/components/stock/StockUnitPicker'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
 import { ChevronDown, Loader2, X } from 'lucide-react'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export function MoveStockClient() {
   const searchParams = useSearchParams()
@@ -60,7 +61,7 @@ export function MoveStockClient() {
     const supabase = createClient()
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getDataUser(supabase)
     if (!user) return
     const [{ data }, lotRes] = await Promise.all([
       supabase.from('items').select('*').eq('user_id', user.id).order('name'),
@@ -197,7 +198,7 @@ export function MoveStockClient() {
       const supabase = createClient()
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getDataUser(supabase)
     if (!user) return
 
     const hit = await findItemByBarcode(supabase, user.id, trimmed)

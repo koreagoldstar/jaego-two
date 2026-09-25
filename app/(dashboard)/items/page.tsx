@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { AlertTriangle, Layers, Plus } from 'lucide-react'
 import type { Item } from '@/lib/supabase/types'
 import { ItemsListClient } from '@/components/items/ItemsListClient'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +11,7 @@ export default async function ItemsPage() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return null
 
   const { data: rows } = await supabase

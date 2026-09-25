@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { mergeProjectNameOptions } from '@/lib/projects/projectOptions'
 import { ItemTransactionsClient } from '@/components/transactions/ItemTransactionsClient'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,7 @@ export default async function TransactionsByItemPage({
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return null
 
   const [itemsRes, planRes, txRes] = await Promise.all([

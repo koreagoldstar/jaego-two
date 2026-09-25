@@ -5,6 +5,7 @@ import { revalidateInventoryViews } from '@/lib/projects/revalidateViews'
 import { createClient } from '@/lib/supabase/server'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 function revalidateLotViews() {
   revalidateInventoryViews()
@@ -15,7 +16,7 @@ export async function auditStockLotsAction() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const probe = await supabase.from('item_stock_lots').select('id').eq('user_id', user.id).limit(1)
@@ -31,7 +32,7 @@ export async function alignAllStockLotsAction() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const probe = await supabase.from('item_stock_lots').select('id').eq('user_id', user.id).limit(1)
@@ -60,7 +61,7 @@ export async function alignItemStockLotsAction(itemId: string) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const probe = await supabase.from('item_stock_lots').select('id').eq('user_id', user.id).limit(1)

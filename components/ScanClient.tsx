@@ -10,6 +10,7 @@ import {
   findItemByBarcode,
 } from '@/lib/items/barcodeLookup'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export function ScanClient() {
   const router = useRouter()
@@ -21,7 +22,7 @@ export function ScanClient() {
       const supabase = createClient()
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getDataUser(supabase)
       if (!user) return
 
       const hit = await findItemByBarcode(supabase, user.id, code)

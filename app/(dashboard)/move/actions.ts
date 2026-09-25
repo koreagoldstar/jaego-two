@@ -3,12 +3,13 @@
 import { ensureOutboundLotForScan } from '@/lib/items/ensureOutboundLot'
 import { revalidateInventoryViews } from '@/lib/projects/revalidateViews'
 import { createClient } from '@/lib/supabase/server'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export async function prepareOutboundLotAction(itemId: string, scannedCode: string) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const itemIdTrim = itemId.trim()

@@ -2,12 +2,13 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export async function deleteItemsAction(ids: string[]): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false, error: '로그인이 필요합니다' }
 
   const clean = Array.from(new Set(ids.map(id => id.trim()).filter(Boolean)))

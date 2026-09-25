@@ -16,6 +16,7 @@ import {
   to1DBarcodeSafeString,
 } from '@/lib/items/barcodePayload'
 import { Loader2, Package, PencilLine, Printer } from 'lucide-react'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 type LabelPreset = {
   key: string
@@ -589,7 +590,7 @@ export function BarcodePanel() {
       const supabase = createClient()
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getDataUser(supabase)
       if (!user || cancelled) {
         setItemsLoading(false)
         return

@@ -10,6 +10,7 @@ import { ItemStockLegacyClient } from '@/components/items/ItemStockLegacyClient'
 import { ItemStockLotsClient } from '@/components/items/ItemStockLotsClient'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { Pencil } from 'lucide-react'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,7 @@ export default async function ItemDetailPage({ params }: { params: { id: string 
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return null
 
   const { data: row } = await supabase

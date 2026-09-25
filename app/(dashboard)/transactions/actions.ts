@@ -10,6 +10,7 @@ import { deleteUnitLotsFifo } from '@/lib/items/stockLotFifo'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidateInventoryViews } from '@/lib/projects/revalidateViews'
 import { revalidatePath } from 'next/cache'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 function parseDatetimeLocalToIso(s: string): string | null {
   const t = s.trim()
@@ -27,7 +28,7 @@ export async function updateStockTransactionAction(id: string, formData: FormDat
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const note = String(formData.get('note') ?? '').trim()
@@ -81,7 +82,7 @@ export async function updateInventoryEventAction(id: string, formData: FormData)
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const item_name = String(formData.get('item_name') ?? '').trim()
@@ -108,7 +109,7 @@ export async function deleteStockTransactionAction(id: string) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const { data: tx, error: txError } = await supabase
@@ -205,7 +206,7 @@ export async function deleteInventoryEventAction(id: string) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const { error } = await supabase.from('inventory_events').delete().eq('id', id).eq('user_id', user.id)

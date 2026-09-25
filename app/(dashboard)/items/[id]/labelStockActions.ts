@@ -4,6 +4,7 @@ import { parseUnitSuffixIndex } from '@/lib/items/lotCodes'
 import { createClient } from '@/lib/supabase/server'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 /**
  * 라벨 #N = lot_code 끝 순번(-00N)에 해당하는 입고 단위 1개를 삭제합니다.
@@ -13,7 +14,7 @@ export async function deleteItemLabelUnitAction(itemId: string, formData: FormDa
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
   const userId = user.id
 

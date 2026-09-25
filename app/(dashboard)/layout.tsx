@@ -3,12 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { MobileNav } from '@/components/MobileNav'
 import { DesktopNav } from '@/components/DesktopNav'
 import { getWorkspace } from '@/lib/saas/workspace'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) {
     redirect('/login')
   }

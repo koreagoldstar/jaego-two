@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Download, Loader2, Package, Search } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export type ItemOption = {
   id: string
@@ -60,7 +61,7 @@ export function ItemTransactionsClient({ items, projectOptions, initialItemId }:
     const supabase = createClient()
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getDataUser(supabase)
     if (!user) {
       setLoading(false)
       setLoadError('로그인이 필요합니다')

@@ -7,6 +7,7 @@ import {
   sanitizeFilenamePart,
 } from '@/lib/transactions/exportExcel'
 import { NextRequest, NextResponse } from 'next/server'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getDataUser(supabase)
     if (!user) return new NextResponse('Unauthorized', { status: 401 })
 
     const mode = request.nextUrl.searchParams.get('mode') ?? 'all'

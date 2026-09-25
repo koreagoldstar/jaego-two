@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { fetchAllKnownLotCodesForItem, lotCodeBelongsToItemBase } from '@/lib/items/knownLotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 function uniqueCodes(raw: string): string[] {
   const rows = raw
@@ -17,7 +18,7 @@ export async function reconcileItemLotsByScannedCodesAction(itemId: string, form
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const codes = uniqueCodes(String(formData.get('codes') ?? ''))

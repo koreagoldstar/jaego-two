@@ -17,6 +17,7 @@ import {
 import type { Item } from '@/lib/supabase/types'
 import { BarcodeCamera } from '@/components/BarcodeCamera'
 import { Loader2, Trash2 } from 'lucide-react'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 type ScanEntry = {
   code: string
@@ -56,7 +57,7 @@ export function BulkOutClient() {
     const supabase = createClient()
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getDataUser(supabase)
     if (!user) return
     const { data } = await supabase.from('items').select('*').eq('user_id', user.id).order('name')
     setItems((data ?? []) as Item[])
@@ -113,7 +114,7 @@ export function BulkOutClient() {
       const supabase = createClient()
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getDataUser(supabase)
       if (!user) return
 
       const hit = await findItemByBarcode(supabase, user.id, trimmed)
@@ -267,7 +268,7 @@ export function BulkOutClient() {
     const supabase = createClient()
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getDataUser(supabase)
     if (!user) {
       setMsg({ type: 'err', text: '로그인이 필요합니다.' })
       submittingRef.current = false

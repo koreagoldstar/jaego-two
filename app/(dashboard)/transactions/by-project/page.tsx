@@ -6,6 +6,7 @@ import {
   PROJECT_NONE_KEY,
   ProjectTransactionsClient,
 } from '@/components/transactions/ProjectTransactionsClient'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,7 @@ export default async function TransactionsByProjectPage({
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return null
 
   const [planRes, txRes] = await Promise.all([

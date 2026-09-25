@@ -9,6 +9,7 @@ import {
 import type { StockTransaction } from '@/lib/supabase/types'
 import { TransactionsHistoryClient } from '@/components/transactions/TransactionsHistoryClient'
 import { HISTORY_UI_LIMIT } from '@/lib/transactions/historyLimits'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,7 @@ export default async function TransactionsPage() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return null
 
   const [txRes, planRes] = await Promise.all([

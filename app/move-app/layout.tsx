@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { SignOutButton } from '@/components/SignOutButton'
 import { getWorkspace } from '@/lib/saas/workspace'
 import { APP_NAME } from '@/lib/saas/mode'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,7 +12,7 @@ export default async function MoveAppLayout({ children }: { children: React.Reac
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) {
     redirect('/login')
   }

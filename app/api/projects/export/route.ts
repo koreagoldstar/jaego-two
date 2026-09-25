@@ -4,6 +4,7 @@ import { fetchAllPaged } from '@/lib/supabase/fetchAll'
 import { formatKstDateTime } from '@/lib/time/formatKst'
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getDataUser(supabase)
     if (!user) return new NextResponse('Unauthorized', { status: 401 })
 
     const wb = XLSX.utils.book_new()

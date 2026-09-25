@@ -2,6 +2,7 @@ import { BulkOutClient } from '@/components/BulkOutClient'
 import { BulkOutUndoPanel, type UndoOutboundRow } from '@/components/BulkOutUndoPanel'
 import { kstTodayRangeIso } from '@/lib/time/kstDayRange'
 import { createClient } from '@/lib/supabase/server'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export default async function MoveBulkPage() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
 
   let undoRows: UndoOutboundRow[] = []
   const { label: dayLabel, start, end } = kstTodayRangeIso()

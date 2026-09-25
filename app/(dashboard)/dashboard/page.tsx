@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getWorkspace, trialDaysLeft, type Workspace } from '@/lib/saas/workspace'
 import { formatWon } from '@/lib/saas/plans'
 import { Package, ArrowLeftRight, ScanLine, Barcode, History, Boxes, FolderKanban, Table } from 'lucide-react'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +11,7 @@ export default async function HomePage() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
 
   let totalQty = 0
   let itemCount = 0

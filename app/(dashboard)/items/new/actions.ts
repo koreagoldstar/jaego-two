@@ -5,6 +5,7 @@ import { generateBarcodeValue } from '@/lib/items/codeGeneratorsServer'
 import { allocateUnitLotCodesForItem, resolveItemLotBase } from '@/lib/items/knownLotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { redirect } from 'next/navigation'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 /** 입출고 이력 보조 테이블 — 실패해도 품목 등록 자체는 성공시키고 서버 로그만 남김 (throw 시 Digest 오류 페이지로 이어짐) */
 async function logInventoryEvents(
@@ -40,7 +41,7 @@ export async function createItemAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) redirect('/login')
 
   const name = String(formData.get('name') ?? '').trim()
@@ -127,7 +128,7 @@ export async function createItemsBatchAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) redirect('/login')
 
   const prefix = String(formData.get('bulk_prefix') ?? '').trim()

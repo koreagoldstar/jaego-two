@@ -6,12 +6,13 @@ import { allocateUnitLotCodesForItem, fetchAllKnownLotCodesForItem } from '@/lib
 import { deleteUnitLotsFifo } from '@/lib/items/stockLotFifo'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { redirect } from 'next/navigation'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export async function updateItemAction(itemId: string, formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) redirect('/login')
 
   const name = String(formData.get('name') ?? '').trim()

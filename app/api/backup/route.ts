@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { isMissingTableError } from '@/lib/supabase/missingTable'
 import { NextResponse } from 'next/server'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,7 @@ export async function GET() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

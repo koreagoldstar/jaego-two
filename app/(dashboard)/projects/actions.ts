@@ -2,6 +2,7 @@
 
 import { revalidateInventoryViews } from '@/lib/projects/revalidateViews'
 import { createClient } from '@/lib/supabase/server'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 function revalidateProjectViews() {
   revalidateInventoryViews()
@@ -11,7 +12,7 @@ export async function updateProjectMetaAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const old_name = String(formData.get('old_name') ?? '').trim()
@@ -48,7 +49,7 @@ export async function renameProjectAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const old_name = String(formData.get('old_name') ?? '').trim()
@@ -144,7 +145,7 @@ export async function saveProjectPlanAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return
 
   const project_name = String(formData.get('project_name') ?? '').trim()
@@ -183,7 +184,7 @@ export async function saveProjectPlanBatchAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return
 
   const project_name = String(formData.get('project_name') ?? '').trim()
@@ -225,7 +226,7 @@ export async function deleteProjectPlanAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return
 
   const project_name = String(formData.get('project_name') ?? '').trim()
@@ -246,7 +247,7 @@ export async function updateProjectPlanEntryAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return
 
   const project_name = String(formData.get('project_name') ?? '').trim()
@@ -293,7 +294,7 @@ export async function completeProjectAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return
 
   const project_name = String(formData.get('project_name') ?? '').trim()
@@ -315,7 +316,7 @@ export async function reopenProjectAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return
 
   const project_name = String(formData.get('project_name') ?? '').trim()
@@ -330,7 +331,7 @@ export async function deleteProjectAction(formData: FormData) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const project_name = String(formData.get('project_name') ?? '').trim()

@@ -8,6 +8,7 @@ import { ProjectOutboundHistory } from '@/components/projects/ProjectOutboundHis
 import { ProjectPlanMultiForm } from '@/components/projects/ProjectPlanMultiForm'
 import { ProjectPlanSection } from '@/components/projects/ProjectPlanSection'
 import { normalizeProjectGroupKey } from '@/lib/history/groupByProject'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -46,7 +47,7 @@ export default async function ProjectsPage() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return null
 
   const [itemsRes, planRes, txDisplayRes, txAggRes, statusRes] = await Promise.all([

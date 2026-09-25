@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspace, trialDaysLeft } from '@/lib/saas/workspace'
 import { formatWon } from '@/lib/saas/plans'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export default async function SettingsPage() {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   const workspace = user ? await getWorkspace(supabase, user.id, { withItemCount: true }) : null
   const limit = workspace?.plan.itemLimit ?? null
   const used = workspace?.itemCount ?? 0

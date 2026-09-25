@@ -9,6 +9,7 @@ import {
 } from '@/lib/items/knownLotCodes'
 import { isMissingItemStockLotsTable } from '@/lib/supabase/missingTable'
 import { revalidatePath } from 'next/cache'
+import { getDataUser } from '@/lib/supabase/dataUser'
 
 /** `<input type="datetime-local">` 값 (타임존 없음) → ISO. 앱 기본 KST(+09:00)로 저장 */
 function parseDatetimeLocalToIso(s: string): string | null {
@@ -32,7 +33,7 @@ export async function addItemStockLotAction(itemId: string, formData: FormData) 
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const qty = Math.max(1, parseInt(String(formData.get('quantity') ?? '1'), 10) || 1)
@@ -89,7 +90,7 @@ export async function updateItemStockLotAction(
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const qty = Math.max(1, parseInt(String(formData.get('quantity') ?? '1'), 10) || 1)
@@ -164,7 +165,7 @@ export async function deleteItemStockLotAction(itemId: string, lotId: string) {
   const supabase = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await getDataUser(supabase)
   if (!user) return { ok: false as const, error: '로그인이 필요합니다' }
 
   const { data: row, error: selErr } = await supabase
