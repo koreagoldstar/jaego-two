@@ -36,6 +36,9 @@ export function SiteFooter() {
         {info.length > 0 && (
           <p className="mt-8 text-xs leading-relaxed text-stone-400">{info.join(' · ')}</p>
         )}
+        <p className="mt-2 text-xs text-stone-400">
+          본 사이트는 (주)버킷플레이스의 오늘의집(ohouse)과 무관한 개인 프로젝트입니다.
+        </p>
         <p className="mt-2 text-xs text-stone-400">© {new Date().getFullYear()} {SITE.name}. All rights reserved.</p>
       </div>
     </footer>
