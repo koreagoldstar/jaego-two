@@ -595,10 +595,11 @@ export function BarcodePanel() {
         setItemsLoading(false)
         return
       }
-      const { data } = await supabase.from('items').select('*').eq('user_id', user.id).order('name')
+      const [{ data }, lotRes] = await Promise.all([
+        supabase.from('items').select('*').eq('user_id', user.id).order('name'),
+        fetchAllUserStockLots(supabase, user.id),
+      ])
       const itemList = (data ?? []) as Item[]
-
-      const lotRes = await fetchAllUserStockLots(supabase, user.id)
 
       const lotsAvailable = !lotRes.error
       let knownFromTx: string[] = []

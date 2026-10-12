@@ -63,13 +63,22 @@ export function MoveStockClient() {
       data: { user },
     } = await getDataUser(supabase)
     if (!user) return
-    const [{ data }, lotRes] = await Promise.all([
+    // 조회 5개를 한 번에 — 단계별로 기다리면 DB 왕복 시간만큼 화면이 늦게 뜸
+    const [{ data }, lotRes, projectRes, txRes, statusRes] = await Promise.all([
       supabase.from('items').select('*').eq('user_id', user.id).order('name'),
       supabase
         .from('item_stock_lots')
         .select('id, item_id, lot_code, quantity, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: true }),
+      supabase.from('project_usage_plans').select('project_name, item_id, planned_qty').eq('user_id', user.id),
+      supabase
+        .from('stock_transactions')
+        .select('project, item_id, direction, amount')
+        .eq('user_id', user.id)
+        .not('project', 'is', null)
+        .neq('project', ''),
+      supabase.from('project_status').select('project_name').eq('user_id', user.id),
     ])
     const lotRows = lotRes.error ? [] : (lotRes.data ?? [])
     setItems((data ?? []) as Item[])
@@ -93,16 +102,6 @@ export function MoveStockClient() {
       unitOptions[itemId] = buildStockUnitOptions(lots)
     }
     setLotsByItem(unitOptions)
-    const [projectRes, txRes, statusRes] = await Promise.all([
-      supabase.from('project_usage_plans').select('project_name, item_id, planned_qty').eq('user_id', user.id),
-      supabase
-        .from('stock_transactions')
-        .select('project, item_id, direction, amount')
-        .eq('user_id', user.id)
-        .not('project', 'is', null)
-        .neq('project', ''),
-      supabase.from('project_status').select('project_name').eq('user_id', user.id),
-    ])
     const completedProjects = new Set(
       ((statusRes.data ?? []) as Array<{ project_name?: string }>)
         .map(r => (r.project_name ?? '').trim())
