@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { SignOutButton } from '@/components/SignOutButton'
 import { getWorkspace } from '@/lib/saas/workspace'
-import { APP_NAME } from '@/lib/saas/mode'
+import { APP_NAME, SAAS_MODE } from '@/lib/saas/mode'
 import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +16,7 @@ export default async function MoveAppLayout({ children }: { children: React.Reac
   if (!user) {
     redirect('/login')
   }
-  const workspace = await getWorkspace(supabase, user.id)
+  const workspace = SAAS_MODE ? await getWorkspace(supabase, user.id) : null
 
   return (
     <div className="min-h-[100dvh] bg-[#0f1419] flex flex-col text-slate-100">

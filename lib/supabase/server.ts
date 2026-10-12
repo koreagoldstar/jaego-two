@@ -1,8 +1,10 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 import { getSupabasePublicEnv } from '@/lib/supabase/supabasePublicEnv'
 
-export async function createClient() {
+/** 한 요청(레이아웃 + 페이지) 안에서는 같은 클라이언트를 재사용 — 세션 해석을 한 번만 하도록 */
+export const createClient = cache(async function createClient() {
   const { url, key } = getSupabasePublicEnv()
   const cookieStore = await cookies()
   return createServerClient(url, key, {
@@ -19,4 +21,4 @@ export async function createClient() {
       },
     },
   })
-}
+})

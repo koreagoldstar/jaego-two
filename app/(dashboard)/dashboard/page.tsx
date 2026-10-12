@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspace, trialDaysLeft, type Workspace } from '@/lib/saas/workspace'
 import { formatWon } from '@/lib/saas/plans'
+import { SAAS_MODE } from '@/lib/saas/mode'
 import { Package, ArrowLeftRight, ScanLine, Barcode, History, Boxes, FolderKanban, Table } from 'lucide-react'
 import { getDataUser } from '@/lib/supabase/dataUser'
 
@@ -17,8 +18,11 @@ export default async function HomePage() {
   let itemCount = 0
   let workspace: Workspace | null = null
   if (user) {
-    workspace = await getWorkspace(supabase, user.id)
-    const { data: items } = await supabase.from('items').select('quantity').eq('user_id', user.id)
+    const [ws, { data: items }] = await Promise.all([
+      SAAS_MODE ? getWorkspace(supabase, user.id) : null,
+      supabase.from('items').select('quantity').eq('user_id', user.id),
+    ])
+    workspace = ws
     itemCount = items?.length ?? 0
     totalQty = items?.reduce((s, r) => s + (r.quantity ?? 0), 0) ?? 0
   }

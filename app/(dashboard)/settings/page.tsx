@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getWorkspace, trialDaysLeft } from '@/lib/saas/workspace'
 import { formatWon } from '@/lib/saas/plans'
+import { SAAS_MODE } from '@/lib/saas/mode'
 import { getDataUser } from '@/lib/supabase/dataUser'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +22,7 @@ export default async function SettingsPage() {
   const {
     data: { user },
   } = await getDataUser(supabase)
-  const workspace = user ? await getWorkspace(supabase, user.id, { withItemCount: true }) : null
+  const workspace = user && SAAS_MODE ? await getWorkspace(supabase, user.id, { withItemCount: true }) : null
   const limit = workspace?.plan.itemLimit ?? null
   const used = workspace?.itemCount ?? 0
   const usagePct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0
